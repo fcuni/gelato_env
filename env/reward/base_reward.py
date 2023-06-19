@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Dict
 
-from gelato_env.env.gelateria import GelateriaState
+from env.gelateria import GelateriaState
 
 
 class BaseReward:

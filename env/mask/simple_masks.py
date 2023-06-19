@@ -1,7 +1,7 @@
 import numpy as np
 
 from env.gelateria import GelateriaState
-from env.mask import ActionMask
+from env.mask.action_mask import ActionMask
 
 
 class MonotonicMarkdownsMask(ActionMask):
