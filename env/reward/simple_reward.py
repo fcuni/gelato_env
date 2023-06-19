@@ -1,7 +1,7 @@
 from typing import Dict
 
-from gelato_env.env.gelateria import GelateriaState
-from gelato_env.env.reward.base_reward import BaseReward
+from env.gelateria import GelateriaState
+from env.reward.base_reward import BaseReward
 
 
 def get_reduced_price(state: GelateriaState) -> Dict[str, float]:

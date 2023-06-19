@@ -46,11 +46,8 @@ class LightningConfig(BaseConfig):
     default_root_dir: Optional[str] = ROOT_DIR / "experiment_data/training_logs"
     callbacks: Optional[Union[List[Callback], Callback]] = None
     enable_progress_bar: bool = True
-    track_grad_norm: Union[int, float, str] = 2.
     max_epochs: Optional[int] = 10
     accelerator: Optional[Union[str, Accelerator]] = "auto"
-    auto_lr_find: Union[bool, str] = True
-    auto_scale_batch_size: Union[str, bool] = True
 
 
 @dataclass
@@ -62,7 +59,7 @@ class DataGenerationConfig(BaseConfig):
     expected_sales_generator: Generator = StrongSeasonalGaussian()
     uplift_generator: Generator = SigmoidGaussian()
     cache_data: bool = True
-    init_state: GelateriaState = default_init_state()
+    init_state: GelateriaState = field(default_factory=default_init_state)
 
 
 @dataclass
@@ -91,8 +88,8 @@ class OptimiserConfig(BaseConfig):
 
 @dataclass
 class ExperimentConfig(BaseConfig):
-    net_config: NetConfig = NetConfig()
-    lightning_config: LightningConfig = LightningConfig()
-    data_generation_config: DataGenerationConfig = DataGenerationConfig()
-    dataloader_config: DataLoaderConfig = DataLoaderConfig()
+    net_config: NetConfig = field(default_factory=NetConfig)
+    lightning_config: LightningConfig = field(default_factory=LightningConfig)
+    data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
+    dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
     optimiser_config: Optional[OptimiserConfig] = None
