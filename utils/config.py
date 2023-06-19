@@ -46,13 +46,8 @@ class LightningConfig(BaseConfig):
     default_root_dir: Optional[str] = ROOT_DIR / "experiment_data/training_logs"
     callbacks: Optional[Union[List[Callback], Callback]] = None
     enable_progress_bar: bool = True
-    # commented out because it throws an error saying that it is not a valid argument
-    # track_grad_norm: Union[int, float, str] = 2.
     max_epochs: Optional[int] = 10
     accelerator: Optional[Union[str, Accelerator]] = "auto"
-    # commented out because it throws an error saying that it is not a valid argument
-    # auto_lr_find: Union[bool, str] = True
-    # auto_scale_batch_size: Union[str, bool] = True
 
 
 @dataclass
