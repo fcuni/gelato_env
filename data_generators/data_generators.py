@@ -93,7 +93,7 @@ class DataGenerator:
                                       batch_size=self.dataloader_config.batch_size,
                                       shuffle=self.dataloader_config.shuffle,
                                       collate_fn=self.dataloader_config.collate_fn)
-        val_dataloader = DataLoader(train_dataset,
+        val_dataloader = DataLoader(val_dataset,
                                     batch_size=self.dataloader_config.batch_size,
                                     shuffle=False,
                                     collate_fn=self.dataloader_config.collate_fn)
