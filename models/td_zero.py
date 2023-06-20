@@ -1,11 +1,16 @@
+import logging
+import pickle
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Union, Optional, Tuple
-import logging
-import tqdm
+from typing import List, Union
+
 import numpy as np
+import tqdm
 
 from env.gelateria_env import GelateriaEnv
+from models.base_rl_agent import RLAgent
+from utils.config import OptimiserConfig
+from utils.misc import first_not_none
 
 logger = logging.getLogger(__name__)
 
@@ -27,36 +32,32 @@ class StateQuad:
         return self.stock, self.actions, self.reward, self.next_stock
 
 
-class TDZero:
+class TDZero(RLAgent):
+    def __init__(
+        self,
+        env: GelateriaEnv,
+        config: OptimiserConfig,
+        name: str = "TDZero",
+    ):
+        super().__init__(env=env, config=config, name=name)
 
-    def __init__(self,
-                 env: GelateriaEnv,
-                 n_episodes: int,
-                 horizon_steps: int,
-                 name: str = "TD_0",
-                 epsilon: float = 0.9,
-                 gamma: float = 0.9,
-                 alpha: float = 0.9,
-                 warm_start: Optional[int] = None,
-                 q_init: Optional[np.array] = None,
-                 ):
-        self._env = env
-        self._n_episodes = n_episodes
-        self._horizon_steps = horizon_steps
-        self._name = name
-        self._gamma = gamma
-        self._epsilon = epsilon
-        self._alpha = alpha
-        self._warm_start = warm_start
+        # TODO(cunillera): get rid of this and use base class self.config to access config
+        self._n_episodes = config.n_episodes
+        self._horizon_steps = config.horizon_steps
+        self._gamma = config.gamma
+        self._epsilon = config.epsilon
+        self._alpha = config.alpha
+        self._warm_start = config.warm_start
+        self._path_to_model = config.path_to_model
 
         # dims: (n_flavours, stock, reductions)
         # usually taken to be (n_flavours, 101, 101)
         self._dims = env.state_space_size
-        self._Q = q_init if q_init is not None else np.random.normal(size=self._dims)
+        self._Q = first_not_none(config.q_init, np.random.normal(size=self._dims))
         self._G = np.zeros(self._dims[0], dtype=np.float16)
         self._policy = np.zeros(self._dims[:-1], dtype=np.float16)
 
-        self._rng = np.random.default_rng(seed=42)
+        self._rng = np.random.default_rng(seed=self.config.seed)
 
         self._rewards = []
         self._discounted_rewards = []
@@ -102,11 +103,13 @@ class TDZero:
         Returns:
             The greedy actions to take.
         """
+        # TODO(cunillera): sub np.argmax for unbiased argmax
         actions = (np.argmax(self._Q + mask, axis=-1) / 100)[:, current_stock]
         return actions
 
     def _select_random_action(self, mask: np.array):
         """Selects a random action from the masked action space with uniform probability."""
+        # TODO(cunillera): sub np.argmax for unbiased argmax
         lower_bounds = np.argmax(mask == 0, axis=-1)
         masked_actions = self._rng.integers(low=lower_bounds, high=101) / 100
         if isinstance(masked_actions, float):
@@ -126,6 +129,10 @@ class TDZero:
         self._Q[:, st, at] += self._alpha * (self._G - self._Q[:, st, at])
 
     def train(self):
+        """
+        Trains the agent.
+        """
+
         self._env.reset()
         if self._warm_start is not None:
             logger.info(f"Warm starting for {self._warm_start} steps.")
@@ -160,3 +167,15 @@ class TDZero:
             self._policy = np.round(np.argmax(self._Q, axis=-1) / 100, 2)
             self._rewards += [env.state.global_reward]
             self._discounted_rewards += [self._G.tolist()]
+
+    def save(self):
+        """Saves the model to disk."""
+        with open(self._path_to_model, "wb") as f:
+            pickle.dump(self, f)
+
+    def load(self):
+        """Loads the model from disk."""
+        with open(self._path_to_model, "rb") as f:
+            base_model = pickle.load(f)
+        self._Q = base_model._Q
+        self._policy = base_model._policy
