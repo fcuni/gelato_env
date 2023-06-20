@@ -12,6 +12,8 @@ from env.mask.action_mask import ActionMask
 from env.mask.simple_masks import MonotonicMarkdownsMask
 from utils.misc import first_not_none
 
+from env.mask.simple_masks import IdentityMask
+
 logger = logging.getLogger(name=__name__)
 
 
@@ -21,7 +23,7 @@ class GelateriaEnv(gym.Env):
                  init_state: GelateriaState,
                  sales_model: Any,
                  reward: BaseReward,
-                 mask: ActionMask = MonotonicMarkdownsMask,
+                 mask_fn: Callable[[], ActionMask] = MonotonicMarkdownsMask,
                  restock_fct: Optional[Callable[[Gelato], int]] = None,
                  max_stock: int = 100,
                  max_steps: int = 1e8,
@@ -49,7 +51,7 @@ class GelateriaEnv(gym.Env):
         self._is_reset = False
         self._global_step = 0
         self._max_steps = max_steps
-        self._mask = mask
+        self._mask = first_not_none(mask_fn, IdentityMask)()
 
         self.reset()
 
