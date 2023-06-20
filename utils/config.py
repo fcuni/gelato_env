@@ -1,10 +1,19 @@
 from dataclasses import dataclass, field
-from typing import Iterable, Union, Optional, List, Dict, Sequence, Callable, Any, TypeVar
-
-import torch
-
 from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+)
 
+import numpy as np
+import torch
 from pytorch_lightning.accelerators import Accelerator
 from pytorch_lightning.callbacks import Callback
 from torch.utils.data import Sampler
@@ -13,19 +22,18 @@ from data_generators.gaussian_generators import StrongSeasonalGaussian
 from data_generators.generator import Generator
 from data_generators.sigmoid_generators import SigmoidGaussian
 from env.gelateria import GelateriaState, default_init_state
-from utils.misc import get_root_dir, custom_collate_fn
+from utils.misc import custom_collate_fn, get_root_dir
 
 ROOT_DIR = get_root_dir()
 
-T_co = TypeVar('T_co', covariant=True)
-T = TypeVar('T')
+T_co = TypeVar("T_co", covariant=True)
+T = TypeVar("T")
 
 
 @dataclass
 class BaseConfig:
-
     def to_dict(self):
-        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
 @dataclass
@@ -83,7 +91,15 @@ class DataLoaderConfig(BaseConfig):
 
 @dataclass
 class OptimiserConfig(BaseConfig):
-    pass
+    n_episodes: int = 100
+    horizon_steps: int = 10
+    epsilon: float = 0.9
+    gamma: float = 0.9
+    alpha: float = 0.9
+    warm_start: Optional[int] = None
+    q_init: Optional[np.array] = None
+    path_to_model: Path = ROOT_DIR / "experiment_data/trained_models"
+    seed: int = 42
 
 
 @dataclass
@@ -92,4 +108,4 @@ class ExperimentConfig(BaseConfig):
     lightning_config: LightningConfig = field(default_factory=LightningConfig)
     data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
     dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
-    optimiser_config: Optional[OptimiserConfig] = None
+    optimiser_config: Optional[OptimiserConfig] = field(default_factory=OptimiserConfig)
