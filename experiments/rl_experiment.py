@@ -5,6 +5,8 @@ from models.mlp_sales import MLPLogSalesModel
 from models.td_zero import TDZero
 from utils.config import ExperimentConfig
 
+from env.mask.simple_masks import MonotonicMarkdownsMask
+
 
 def get_experiment_config():
     config = ExperimentConfig()
@@ -33,7 +35,14 @@ class RLExperiment:
 
     def build_env(self):
         reward = SimpleReward(waste_penalty=0.0)
-        env = GelateriaEnv(init_state=None, sales_model=self.get_supervised_model(), reward=reward, restock_fct=None)
+        init_state = self._config.data_generation_config.init_state
+        restock_fct = None
+        env = GelateriaEnv(init_state=init_state,
+                           sales_model=self.get_supervised_model(),
+                           reward=reward,
+                           mask_fn=MonotonicMarkdownsMask,
+                           restock_fct=restock_fct)
+
         return env
 
     def run(self):
