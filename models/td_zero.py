@@ -6,6 +6,7 @@ from typing import List, Union
 
 import numpy as np
 import tqdm
+import os
 
 from env.gelateria_env import GelateriaEnv
 from models.base_rl_agent import RLAgent
@@ -170,12 +171,15 @@ class TDZero(RLAgent):
 
     def save(self):
         """Saves the model to disk."""
-        with open(self._path_to_model, "wb") as f:
+        os.makedirs(self.config.path_to_model, exist_ok=True)
+        path = self.config.path_to_model / f"{self.name}.pkl"
+        with open(path, "wb") as f:
             pickle.dump(self, f)
 
     def load(self):
         """Loads the model from disk."""
-        with open(self._path_to_model, "rb") as f:
+        path = self.config.path_to_model / f"{self.name}.pkl"
+        with open(path, "rb") as f:
             base_model = pickle.load(f)
         self._Q = base_model._Q
         self._policy = base_model._policy
