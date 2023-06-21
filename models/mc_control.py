@@ -1,12 +1,15 @@
+import logging
+import pickle
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Union, Optional, Tuple
-import logging
-import tqdm
+from typing import List, Tuple, Union
 
 import numpy as np
+import tqdm
 
 from env.gelateria_env import GelateriaEnv
+from models.base_rl_agent import RLAgent
+from utils.config import OptimiserConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,7 @@ class StateTriplet:
         actions: the actions taken by the agent
         reward: the reward received by the agent
     """
+
     stock: Union[List[int], np.array]
     actions: Union[List[float], np.array]
     reward: Union[List[float], np.array]
@@ -30,7 +34,7 @@ class StateTriplet:
         Convert the lists to numpy arrays and round the actions to two decimal places.
         """
         self.stock = np.array(self.stock)
-        self.actions = np.round(100*np.array(self.actions), 2).astype(int)
+        self.actions = np.round(100 * np.array(self.actions), 2).astype(int)
         self.reward = np.array(self.reward)
 
     def triplet(self) -> Tuple[np.array, np.array, np.array]:
@@ -48,6 +52,7 @@ class Trajectory:
     Attributes:
         states: the states of the environment
     """
+
     states: List[StateTriplet]
 
     def append(self, state: StateTriplet):
@@ -67,17 +72,13 @@ class Trajectory:
         return iter(self.states)
 
 
-class MCControl:
-
-    def __init__(self,
-                 env: GelateriaEnv,
-                 n_episodes: int,
-                 horizon_steps: int,
-                 name: str = "mc_control",
-                 epsilon: float = 0.9,
-                 gamma: float = 0.9,
-                 warm_start: Optional[int] = None,
-                 ):
+class MCControl(RLAgent):
+    def __init__(
+        self,
+        env: GelateriaEnv,
+        config: OptimiserConfig,
+        name: str = "mc_control",
+    ):
         """
         Initialize the MC Control algorithm.
 
@@ -92,12 +93,12 @@ class MCControl:
         """
 
         self._env = env
-        self._n_episodes = n_episodes
-        self._horizon_steps = horizon_steps
+        self._n_episodes = config.n_episodes
+        self._horizon_steps = config.horizon_steps
         self._name = name
-        self._gamma = gamma
-        self._epsilon = epsilon
-        self._warm_start = warm_start
+        self._gamma = config.gamma
+        self._epsilon = config.epsilon
+        self._warm_start = config.warm_start
 
         # dims: (n_flavours, stock, reductions)
         # usually taken to be (n_flavours, 101, 101)
@@ -175,7 +176,7 @@ class MCControl:
         Args:
             trajectory: The trajectory to train on.
         """
-        for (st, at, rt) in trajectory.get_triplets_reversed():
+        for st, at, rt in trajectory.get_triplets_reversed():
             # dims: (n_flavours, stock, reductions)
             self._G = rt + self._gamma * self._G
             np.add.at(self._n, (slice(None), st, at), 1)
@@ -191,7 +192,7 @@ class MCControl:
             logger.info(f"Warm starting for {self._warm_start} steps.")
             for _ in range(self._warm_start):
                 self._env.reset()
-                no_op = [0]*self._env.state_space_size[0]
+                no_op = [0] * self._env.state_space_size[0]
                 self._env.step(no_op)
 
         for epi in tqdm.tqdm(range(self._n_episodes)):
@@ -213,11 +214,7 @@ class MCControl:
                 a_i = self._select_action(current_stock=st_0, mask=mask)
                 _, r_i, is_terminal, _ = env.step(a_i)
                 st_i = [product.stock for product in env.state.products.values()]
-                trajectory.append(StateTriplet(stock=st_0,
-                                               actions=a_i,
-                                               reward=list(r_i.values())
-                                               )
-                                  )
+                trajectory.append(StateTriplet(stock=st_0, actions=a_i, reward=list(r_i.values())))
                 st_0 = st_i
 
             self._train_step(trajectory)
@@ -225,3 +222,15 @@ class MCControl:
             self._policy = np.round(np.argmax(self._Q, axis=-1) / 100, 2)
             self._rewards += [env.state.global_reward]
             self._discounted_rewards += [self._G.tolist()]
+
+    def save(self):
+        """Saves the model to disk."""
+        with open(self._path_to_model, "wb") as f:
+            pickle.dump(self, f)
+
+    def load(self):
+        """Loads the model from disk."""
+        with open(self._path_to_model, "rb") as f:
+            base_model = pickle.load(f)
+        self._Q = base_model._Q
+        self._policy = base_model._policy

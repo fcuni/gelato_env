@@ -4,6 +4,15 @@ from env.gelateria import GelateriaState
 from env.mask.action_mask import ActionMask
 
 
+class IdentityMask(ActionMask):
+
+    def __init__(self):
+        super().__init__(name="IdentityMask")
+
+    def __call__(self, state: GelateriaState):
+        return np.zeros((len(state.products), 101))
+
+
 class MonotonicMarkdownsMask(ActionMask):
 
     def __init__(self):
