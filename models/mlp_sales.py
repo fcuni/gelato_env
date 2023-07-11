@@ -63,6 +63,8 @@ class MLPLogSalesModel(pl.LightningModule):
         self._optim = config.optim
         self._model = SalesMLPBlock(input_dim, config.embedding_dims, config.activation)
 
+        self.save_hyperparameters()
+
     @property
     def name(self):
         return self._name
@@ -114,10 +116,10 @@ class MLPLogSalesModel(pl.LightningModule):
             losses = []
             for name, loss in losses_dict.items():
                 losses += [loss]
-                self.log(f"{name}_{step_mode}", loss, on_epoch=True)
+                self.log(f"{name}_{step_mode}", loss, on_epoch=True, prog_bar=True)
 
             step_output = torch.mean(torch.stack(losses), dim=0)
-            self.log(f"mean_loss_{step_mode}", step_output, on_epoch=True)
+            self.log(f"mean_loss_{step_mode}", step_output, on_epoch=True, prog_bar=True)
 
         return step_output
 

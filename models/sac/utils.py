@@ -50,10 +50,17 @@ def collect_random(env, dataset, num_samples=200, state_transform_fn: Optional[C
         state_transform_fn = lambda x: x
 
     state, _, _, _ = env.reset()
+    idx=0
     for _ in range(num_samples):
+        while idx<100 :
+            action = [env.action_space.sample() for _ in range(env.state.n_products)]
+            next_state, reward, done, _ = env.step(action)
+            state = next_state
+            idx += 1
         action = [env.action_space.sample() for _ in range(env.state.n_products)]
         next_state, reward, done, _ = env.step(action)
         dataset.add(state_transform_fn(state), action, list(reward.values()), state_transform_fn(next_state), env.per_product_done_signal)
         state = next_state
         if done:
+            idx = 0 
             state, _, _, _ = env.reset()

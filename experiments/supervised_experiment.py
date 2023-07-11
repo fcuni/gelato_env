@@ -1,4 +1,11 @@
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
+
+import os
+print(os.getcwd())
+
+import sys
+sys.path.append(os.getcwd())
 
 from utils.config import ExperimentConfig
 from data_generators.data_generators import DataGenerator
@@ -11,6 +18,8 @@ def get_model(input_dim, config):
 
 def get_experiment_config():
     config = ExperimentConfig()
+    config.lightning_config.callbacks = [ModelCheckpoint(monitor="mean_loss_train", mode="min", save_top_k=5)]
+    config.lightning_config.max_epochs = 100
     return config
 
 

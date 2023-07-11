@@ -76,6 +76,7 @@ class GelateriaEnv(gym.Env):
             max_stock: Maximum stock level for each product.
             max_steps: Maximum number of steps before the environment is reset.
         """
+        self._name = "GelateriaEnv"
         self._sales_model = sales_model
         self._reward = reward
         self._restock_fct = first_not_none(restock_fct, {product_id: product.stock
@@ -102,6 +103,14 @@ class GelateriaEnv(gym.Env):
         self.action_space = Discrete(101) # define the action space as discrete
 
         self.reset()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def sales_model_name(self):
+        return self._sales_model.name
 
     @property
     def state(self):

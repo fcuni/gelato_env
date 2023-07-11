@@ -19,8 +19,6 @@ from models.sac.utils import collect_random
 
 class SACAgent(nn.Module):
     """Interacts with and learns from the environment."""
-    
-
 
     # def __init__(self,
     #                     state_size,
@@ -28,11 +26,11 @@ class SACAgent(nn.Module):
     #                     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #             ):
     def __init__(self,
-                        env,
-                        config,
-                        name: str = "sac",
-                        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                ):
+                 env,
+                 config,
+                 name: str = "SAC_Discrete",
+                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                 ):
         """Initialize an Agent object.
         
         Params
@@ -42,44 +40,39 @@ class SACAgent(nn.Module):
             random_seed (int): random seed
         """
         super(SACAgent, self).__init__()
+        self._name = name
         self._env = env
         self._dims = tuple(env.state_space_size)
         self.state_size = tuple(env.get_single_observation_space_size())[-1]
         self.action_size = self._env.action_space.n
 
         self.device = device
-        
-        self.gamma = 0.99
-        self.tau = 1e-2
+
+        self._config = config
 
         self.state_transform_fn = get_flatten_observation_from_state
 
-        
-
-        #Temporarily not used
-        hidden_size = 256
-        
-        learning_rate = 5e-4
+        learning_rate = config.sac_config.learning_rate
         self.clip_grad_param = 1
 
         self.target_entropy = -self.action_size  # -dim(A)
 
         self.log_alpha = torch.tensor([0.0], requires_grad=True)
         self.alpha = self.log_alpha.exp().detach()
-        self.alpha_optimizer = optim.Adam(params=[self.log_alpha], lr=learning_rate) 
-                
+        self.alpha_optimizer = optim.Adam(params=[self.log_alpha], lr=learning_rate)
+
         # Actor Network 
 
         self.actor_local = ActorNetwork(self.state_size, self.action_size).to(device)
-        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=learning_rate)     
-        
+        self.actor_optimizer = optim.Adam(self.actor_local.parameters(), lr=learning_rate)
+
         # Critic Network (w/ Target Network)
 
         self.critic1 = CriticNetwork(self.state_size, self.action_size, seed=2).to(device)
         self.critic2 = CriticNetwork(self.state_size, self.action_size, seed=1).to(device)
-        
+
         assert self.critic1.parameters() != self.critic2.parameters()
-        
+
         self.critic1_target = CriticNetwork(self.state_size, self.action_size).to(device)
         self.critic1_target.load_state_dict(self.critic1.state_dict())
 
@@ -87,16 +80,19 @@ class SACAgent(nn.Module):
         self.critic2_target.load_state_dict(self.critic2.state_dict())
 
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=learning_rate)
-        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=learning_rate) 
+        self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=learning_rate)
 
+    @property
+    def name(self):
+        return self._name
 
-    def get_action(self, from_state: Optional[GelateriaState])->Optional[List[Optional[Union[float, int]]]]:
+    def get_action(self, from_state: Optional[GelateriaState]) -> Optional[List[Optional[Union[float, int]]]]:
         """Returns actions for given state as per current policy."""
         # use current state from env if not provided
         state = first_not_none(from_state, self._env.state)
         mask = self._env.mask_actions()
         state_obs = torch.from_numpy(self.state_transform_fn(state)).float().to(self.device)
-        
+
         with torch.no_grad():
             action = self.actor_local.get_det_action(state_obs, mask=mask)
         return action
@@ -105,14 +101,14 @@ class SACAgent(nn.Module):
         mask = self._env.mask_actions(states)
         _, action_probs, log_pis = self.actor_local.evaluate(states, mask=mask)
 
-        q1 = self.critic1(states)   
+        q1 = self.critic1(states)
         q2 = self.critic2(states)
-        min_Q = torch.min(q1,q2)
-        actor_loss = (action_probs * (alpha * log_pis - min_Q )).sum(1).mean()
+        min_Q = torch.min(q1, q2)
+        actor_loss = (action_probs * (alpha * log_pis - min_Q)).sum(1).mean()
         log_action_pi = torch.sum(log_pis * action_probs, dim=1)
         return actor_loss, log_action_pi
-    
-    def learn(self, step, experiences, gamma, d=1):
+
+    def learn(self, experiences, gamma):
         """Updates actor, critics and entropy_alpha parameters using given batch of experience tuples.
         Q_targets = r + γ * (min_critic_target(next_state, actor_target(next_state)) - α *log_pi(next_action|next_state))
         Critic_loss = MSE(Q, Q_target)
@@ -136,7 +132,7 @@ class SACAgent(nn.Module):
         actor_loss.backward()
 
         self.actor_optimizer.step()
-        
+
         # Compute alpha loss
         alpha_loss = - (self.log_alpha.exp() * (log_pis.cpu() + self.target_entropy).detach().cpu()).mean()
         self.alpha_optimizer.zero_grad()
@@ -152,17 +148,18 @@ class SACAgent(nn.Module):
             Q_target1_next = self.critic1_target(next_states)
             Q_target2_next = self.critic2_target(next_states)
 
-            #TODO: check if need to do something to mask logits and action probs
+            # TODO: check if need to do something to mask logits and action probs
             # should check the value of Q_target1_next and Q_target2_next
-            Q_target_next = action_probs * (torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * log_pis)
+            Q_target_next = action_probs * (
+                        torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * log_pis)
 
             # Compute Q targets for current states (y_i)
-            Q_targets = rewards + (gamma * (1 - dones) * Q_target_next.sum(dim=1).unsqueeze(-1)) 
+            Q_targets = rewards + (gamma * (1 - dones) * Q_target_next.sum(dim=1).unsqueeze(-1))
 
-        # Compute critic loss
+            # Compute critic loss
         q1 = self.critic1(states).gather(1, actions.long())
         q2 = self.critic2(states).gather(1, actions.long())
-        
+
         critic1_loss = 0.5 * F.mse_loss(q1, Q_targets)
         critic2_loss = 0.5 * F.mse_loss(q2, Q_targets)
 
@@ -181,10 +178,10 @@ class SACAgent(nn.Module):
         # ----------------------- update target networks ----------------------- #
         self.soft_update(self.critic1, self.critic1_target)
         self.soft_update(self.critic2, self.critic2_target)
-        
+
         return actor_loss.item(), alpha_loss.item(), critic1_loss.item(), critic2_loss.item(), current_alpha
 
-    def soft_update(self, local_model , target_model):
+    def soft_update(self, local_model, target_model):
         """Soft update model parameters.
         θ_target = τ*θ_local + (1 - τ)*θ_target
         Params
@@ -194,7 +191,7 @@ class SACAgent(nn.Module):
             tau (float): interpolation parameter 
         """
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-            target_param.data.copy_(self.tau*local_param.data + (1.0-self.tau)*target_param.data)
+            target_param.data.copy_(self._config.sac_config.tau * local_param.data + (1.0 - self._config.sac_config.tau) * target_param.data)
 
     def train(self):
         # np.random.seed(config.seed)
@@ -204,34 +201,32 @@ class SACAgent(nn.Module):
 
         steps = 0
         average10 = deque(maxlen=10)
-        total_steps = 0
 
-        # TODO: save to config
-        buffer_size = 10000
-        batch_size = 1
-        episodes = 1000
+        buffer_size: int = self._config.sac_config.buffer_size
+        batch_size: int = self._config.sac_config.batch_size
+        n_episodes: int = self._config.sac_config.n_episodes
 
         wandb_config = {
-            "algorithm": "SAC_Discrete",
-            "episodes": episodes,
+            "algorithm": self.name,
+            "episodes": n_episodes,
             "buffer_size": buffer_size,
             "batch_size": batch_size,
-            "environment": "gelateria",
-            "sales_model": self._env._sales_model.name
+            "environment": self._env.name,
+            "sales_model": self._env.sales_model_name
 
         }
 
-        with wandb.init(project="msc_project", entity="timc", config=wandb_config, mode="offline"):
-        
+        with wandb.init(project=self._config.wandb_config.project, entity=self._config.wandb_config.entity,
+                        config=wandb_config, mode=self._config.wandb_config.mode):
 
             wandb.watch(self, log="gradients", log_freq=10)
 
             buffer = ReplayBuffer(buffer_size=buffer_size, batch_size=batch_size, device=self.device)
-            
-            collect_random(env=self._env, dataset=buffer, num_samples=10000, state_transform_fn=self.state_transform_fn) # 10000
-            
-          
-            for i in range(1, episodes+1):
+
+            collect_random(env=self._env, dataset=buffer, num_samples=self._config.sac_config.initial_random_steps,
+                           state_transform_fn=self.state_transform_fn)
+
+            for i in range(1, n_episodes + 1):
                 print(f"Episode {i} starting...")
                 state, _, _, _ = self._env.reset()
 
@@ -242,41 +237,30 @@ class SACAgent(nn.Module):
                     action = self.get_action(state)
                     steps += 1
                     next_state, reward, done, _ = self._env.step(action)
-                    buffer.add(self.state_transform_fn(state), action, list(reward.values()), self.state_transform_fn(next_state), self._env.per_product_done_signal)
-                    policy_loss, alpha_loss, bellmann_error1, bellmann_error2, current_alpha = self.learn(steps, buffer.sample(), gamma=0.99)
+                    buffer.add(self.state_transform_fn(state), action, list(reward.values()),
+                               self.state_transform_fn(next_state), self._env.per_product_done_signal)
+                    policy_loss, alpha_loss, bellmann_error1, bellmann_error2, current_alpha = self.learn(
+                        buffer.sample(), gamma=self._config.sac_config.gamma)
                     state = next_state
                     rewards += np.sum(list(reward.values()))
-                    if rewards >300:
-                        pass
+                    # if rewards >300:
+                    #     pass
                     episode_steps += 1
                     if done:
                         break
                     print(f"[{episode_steps}] next state: {next_state}, reward: {reward}, done: {done}")
 
-                
-
                 average10.append(rewards)
-                total_steps += episode_steps
-                print("Episode: {} | Reward: {} | Polciy Loss: {} | Steps: {}".format(i, rewards, policy_loss, steps,))
-                
+                print("Episode: {} | Reward: {} | Polciy Loss: {} | Steps: {}".format(i, rewards, policy_loss, steps, ))
+
                 wandb.log({"Reward": rewards,
-                        "Average10": np.mean(average10),
-                        "Episodic steps": episode_steps,
-                        "Steps": total_steps,
-                        "Policy Loss": policy_loss,
-                        "Alpha Loss": alpha_loss,
-                        "Bellmann error 1": bellmann_error1,
-                        "Bellmann error 2": bellmann_error2,
-                        "Alpha": current_alpha,
-                        "Steps": steps,
-                        "Episode": i,
-                        "Buffer size": buffer.__len__()})
-
-                # if (i %10 == 0) and config.log_video:
-                #     mp4list = glob.glob('video/*.mp4')
-                #     if len(mp4list) > 1:
-                #         mp4 = mp4list[-2]
-                #         wandb.log({"gameplays": wandb.Video(mp4, caption='episode: '+str(i-10), fps=4, format="gif"), "Episode": i})
-
-                # if i % config.save_every == 0:
-                #     save(config, save_name="SAC_discrete", model=agent.actor_local, wandb=wandb, ep=0)
+                           "Average10": np.mean(average10),
+                           "Episodic steps": episode_steps,
+                           "Policy Loss": policy_loss,
+                           "Alpha Loss": alpha_loss,
+                           "Bellmann error 1": bellmann_error1,
+                           "Bellmann error 2": bellmann_error2,
+                           "Alpha": current_alpha,
+                           "Steps": steps,
+                           "Episode": i,
+                           "Buffer size": buffer.__len__()})

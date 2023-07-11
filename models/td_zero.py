@@ -158,7 +158,7 @@ class TDZero(RLAgent):
             "environment": "gelateria"
 
         }
-        with wandb.init(project="msc_project", entity="timc", config=wandb_config):
+        with wandb.init(project="msc_project", entity="timc", config=wandb_config, mode="offline"):
 
             self._env.reset()
             if self._warm_start is not None:

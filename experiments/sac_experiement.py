@@ -6,19 +6,20 @@ from models.simple_sales import SimpleLinearSalesModel
 
 # from models.td_zero import TDZero
 from models.sac.agent import SACAgent
-from utils.config import ExperimentConfig
+from utils.config import SACExperimentConfig
 
 from env.mask.simple_masks import BooleanMonotonicMarkdownsMask
 
 
+
 def get_experiment_config():
-    config = ExperimentConfig()
+    config = SACExperimentConfig()
     return config
 
 
 class SACExperiment:
     def __init__(self):
-        self._config: ExperimentConfig = get_experiment_config()
+        self._config: SACExperimentConfig = get_experiment_config()
 
     def _get_dataset_generator(self):
         return DataGenerator(
@@ -34,7 +35,7 @@ class SACExperiment:
         return model
 
     def get_rl_model(self):
-        rl_model = SACAgent(env=self.build_env(), name="sac", config=self._config.optimiser_config)
+        rl_model = SACAgent(env=self.build_env(), name="sac", config=self._config)
         return rl_model
 
 

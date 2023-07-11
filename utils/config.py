@@ -103,9 +103,40 @@ class OptimiserConfig(BaseConfig):
 
 
 @dataclass
+class SACConfig(BaseConfig):
+    n_episodes: int = 1000
+    gamma: float = 0.99
+    tau: float = 1e-2
+    learning_rate: float = 5e-4
+    buffer_size: int = 10000
+    batch_size: int = 1
+    initial_random_steps: int = 1000
+
+
+@dataclass
+class WandbConfig(BaseConfig):
+    project: str = "msc_project"
+    entity: str = "timc"
+    mode: str = "offline"
+
+
+@dataclass
 class ExperimentConfig(BaseConfig):
     net_config: NetConfig = field(default_factory=NetConfig)
     lightning_config: LightningConfig = field(default_factory=LightningConfig)
     data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
     dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
     optimiser_config: Optional[OptimiserConfig] = field(default_factory=OptimiserConfig)
+
+
+@dataclass
+class SACExperimentConfig(BaseConfig):
+    net_config: NetConfig = field(default_factory=NetConfig)
+    data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
+    dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
+    wandb_config: WandbConfig = field(default_factory=WandbConfig)
+    sac_config: SACConfig = field(default_factory=SACConfig)
+
+
+
+
