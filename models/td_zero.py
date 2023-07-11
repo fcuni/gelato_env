@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class StateQuad:
-    stock: Union[List[int], np.array]
-    actions: Union[List[float], np.array]
-    reward: Union[List[float], np.array]
-    next_stock: Union[List[int], np.array]
+    stock: Union[List[int], np.ndarray] # can be a list of integers or a numpy array
+    actions: Union[List[float], np.ndarray] # can be a list of floats or a numpy array
+    reward: Union[List[float], np.ndarray] # can be a list of floats or a numpy array
+    next_stock: Union[List[int], np.ndarray] # can be a list of integers or a numpy array
 
     def __post_init__(self):
         self.stock = np.array(self.stock)
@@ -39,6 +39,7 @@ class TDZero(RLAgent):
         env: GelateriaEnv,
         config: OptimiserConfig,
         name: str = "TDZero",
+        
     ):
         super().__init__(env=env, config=config, name=name)
 
@@ -78,7 +79,7 @@ class TDZero(RLAgent):
             means.append(np.mean(self._Q[idx]))
         return (self._Q - np.array(means)).squeeze(axis=0)
 
-    def _select_action(self, current_stock: List[int], mask: np.array):
+    def _select_action(self, current_stock: List[int], mask: np.ndarray):
         """
         Selects an action from the masked action space.
         Args:
@@ -93,7 +94,7 @@ class TDZero(RLAgent):
         else:
             return self._select_random_action(mask=mask)
 
-    def _select_greedy_action(self, current_stock: List[int], mask: np.array):
+    def _select_greedy_action(self, current_stock: List[int], mask: np.ndarray):
         """
         Selects the greedy action from the action space.
 
@@ -105,10 +106,23 @@ class TDZero(RLAgent):
             The greedy actions to take.
         """
         # TODO(cunillera): sub np.argmax for unbiased argmax
-        actions = (np.argmax(self._Q + mask, axis=-1) / 100)[:, current_stock]
+        
+        # need to delete later
+        # print(f"current stock: {current_stock}, shape: ({len(current_stock)},)")
+        # print(f"mask: {mask.shape}, values: {mask}")
+        # print(f"Q: {self._Q.shape}")
+        # print(f"{}")
+        if len(mask.shape)< len(self._Q.shape):
+            # print(f"np.argmax(self._Q + mask.reshape(*(mask.shape), 1), axis=-1)/100 shape {(np.argmax(self._Q + mask.reshape(*(mask.shape), 1), axis=-1)/100).shape}")
+            # print(f"np.argmax(self._Q + mask.reshape(*(mask.shape), 1))/100 {np.argmax(self._Q + mask.reshape(*(mask.shape), 1), axis=-1)/100}")
+            # print(f"np.array(current_stock)[:,None] {np.array(current_stock)[:,None]}")
+            actions = np.take_along_axis(np.argmax(self._Q + mask.reshape(*(mask.shape), 1), axis=-1)/100, (np.array(current_stock)[:,None]), axis=1).squeeze(-1)
+        else:
+            actions = (np.argmax(self._Q + mask, axis=-1) / 100)[:, current_stock]
+        # print(f"actions:{actions}")
         return actions
 
-    def _select_random_action(self, mask: np.array):
+    def _select_random_action(self, mask: np.ndarray):
         """Selects a random action from the masked action space with uniform probability."""
         # TODO(cunillera): sub np.argmax for unbiased argmax
         lower_bounds = np.argmax(mask == 0, axis=-1)

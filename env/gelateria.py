@@ -55,19 +55,21 @@ class GelateriaState:
         for product_id, product in self.products.items():
             flavour_encoding = flavour_one_hot[product.flavour.value]
             public_obs_tensor.append(torch.hstack([torch.tensor(self.day_number / 365),
-                                                   torch.tensor(product.stock / self.max_stock),
+                                                   torch.tensor(product.stock),#torch.tensor(product.stock / self.max_stock),
                                                    torch.tensor(product.base_price),
                                                    torch.tensor(self.current_markdowns[product_id]),
                                                    torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
                                                                                n_flavours),
                                                    ]).float())
         return torch.vstack(public_obs_tensor)
+    
+
 
 
 def default_init_state() -> GelateriaState:
-    products = [Gelato(flavour=Flavour.VANILLA, base_price=1.0, stock=100),
-                Gelato(flavour=Flavour.CHOCOLATE, base_price=1.0, stock=100),
-                Gelato(flavour=Flavour.STRAWBERRY, base_price=1.0, stock=100)
+    products = [Gelato(flavour=Flavour.VANILLA, base_price=1.0, stock=100, id=uuid.uuid4()),
+                Gelato(flavour=Flavour.CHOCOLATE, base_price=1.0, stock=100, id=uuid.uuid4()),
+                Gelato(flavour=Flavour.STRAWBERRY, base_price=1.0, stock=100, id=uuid.uuid4()),
                 ]
 
     return GelateriaState(

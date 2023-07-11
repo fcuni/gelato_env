@@ -1,21 +1,58 @@
 from copy import deepcopy
-from typing import List, Optional, Callable, Dict, Any
+from typing import List, Optional, Callable, Dict, Any, Union
 import logging
 
 import gym
+from gym.spaces import Box, Discrete
+#import gymnasium as gym
 import numpy as np
 from ray.rllib.utils import override
+import torch
 
 from env.gelateria import Gelato, GelateriaState
 from env.reward.base_reward import BaseReward
 from env.mask.action_mask import ActionMask
 from env.mask.simple_masks import MonotonicMarkdownsMask
+from utils.enums import Flavour
 from utils.misc import first_not_none
 
 from env.mask.simple_masks import IdentityMask
 
 logger = logging.getLogger(name=__name__)
 
+
+class OneHotEncoding(gym.Space):
+    """
+    {0,...,1,...,0}
+
+    Example usage:
+    self.observation_space = OneHotEncoding(size=4)
+    """
+    def __init__(self, size=None):
+        assert isinstance(size, int) and size > 0
+        self.size = size
+        gym.Space.__init__(self, (), np.int64)
+
+    def sample(self):
+        one_hot_vector = np.zeros(self.size)
+        one_hot_vector[np.random.randint(self.size)] = 1
+        return one_hot_vector
+
+    def contains(self, x):
+        if isinstance(x, (list, tuple, np.ndarray)):
+            number_of_zeros = list(x).contains(0)
+            number_of_ones = list(x).contains(1)
+            return (number_of_zeros == (self.size - 1)) and (number_of_ones == 1)
+        else:
+            return False
+
+    def __repr__(self):
+        return "OneHotEncoding(%d)" % self.size
+
+    def __eq__(self, other):
+        return self.size == other.size
+    
+    
 
 class GelateriaEnv(gym.Env):
 
@@ -26,7 +63,7 @@ class GelateriaEnv(gym.Env):
                  mask_fn: Callable[[], ActionMask] = MonotonicMarkdownsMask,
                  restock_fct: Optional[Callable[[Gelato], int]] = None,
                  max_stock: int = 100,
-                 max_steps: int = 1e8,
+                 max_steps: int = int(1e8),
                  ):
         """
         Initialize the Gelateria environment.
@@ -53,6 +90,17 @@ class GelateriaEnv(gym.Env):
         self._max_steps = max_steps
         self._mask = first_not_none(mask_fn, IdentityMask)()
 
+        
+        spaces = {
+            'day_of_year': Box(low=0, high=1, dtype=np.float32), # current day of the date / # of days in the year
+            'stock_level': Box(low=0, high=np.inf, dtype=int),
+            'current_markdowns': Box(low=0, high=1, dtype=np.float32),
+            'base_price': Box(low=0, high=np.inf, dtype=np.float32),
+            'flavour': OneHotEncoding(size=len(Flavour.get_all_flavours()))
+        }
+        self.observation_space = gym.spaces.Dict(spaces)
+        self.action_space = Discrete(101) # define the action space as discrete
+
         self.reset()
 
     @property
@@ -63,10 +111,12 @@ class GelateriaEnv(gym.Env):
     @property
     def state_space_size(self):
         """Return the size of the state space."""
+        assert self._state is not None
+
         n_flavour = len(self._state.products)
         return n_flavour, self._max_stock + 1, 101
 
-    def mask_actions(self, state: Optional[GelateriaState] = None) -> np.array:
+    def mask_actions(self, state: Optional[GelateriaState] = None) -> np.ndarray:
         """Allow only increasing markdowns."""
         if state is None:
             state = self._state
@@ -74,6 +124,7 @@ class GelateriaEnv(gym.Env):
 
     def _restock(self):
         """Restock the products in the environment."""
+        assert self._state is not None
         self._state.restock(self._restock_fct)
 
     @staticmethod
@@ -90,24 +141,32 @@ class GelateriaEnv(gym.Env):
             state.products[product_id].stock = new_stock_level
             if new_stock_level > 0:
                 is_terminal = False
+
         state.is_terminal = is_terminal
 
     @staticmethod
-    def _update_markdowns(action: List[float], state: GelateriaState):
+    def _update_markdowns(action: Union[List[float], List[int]], state: GelateriaState):
         """Update the markdowns of the products in the environment.
 
         Args:
             action: The markdowns of each product.
             state: The current state of the environment.
         """
+
+        assert (state.last_markdowns is not None) and (state.current_markdowns is not None) and (state.last_action is not None)
+
         for product_id, markdown in zip(state.products, action):
+            if isinstance(markdown, int):
+                markdown = round(markdown / 100, 2)
+            elif isinstance(markdown, float):
+                markdown = round(markdown, 2)
             state.last_markdowns[product_id] = state.current_markdowns[product_id]
             state.current_markdowns[product_id] = markdown
             state.last_action[product_id] = markdown
 
     def _update_internal(self,
-                         observations: Dict[str, Dict],
-                         from_state: Optional[GelateriaState] = None, ):
+                         observations: Dict[str, Union[torch.Tensor, Dict]],
+                         from_state: Optional[GelateriaState] = None):
         """Update the internal state of the environment.
 
         Args:
@@ -130,7 +189,7 @@ class GelateriaEnv(gym.Env):
         if from_state is None:
             self._global_step += 1
 
-    def get_observations(self, state: GelateriaState) -> Dict[str, Dict]:
+    def get_observations(self, state: GelateriaState) -> Dict[str, Union[torch.Tensor, Dict]]:
         """
         Return the observations of the environment.
 
@@ -140,6 +199,9 @@ class GelateriaEnv(gym.Env):
         Returns:
             The observations of the environment.
         """
+
+        assert state is not None
+
         public_obs = state.get_public_observations()
         return {"public_obs": public_obs,
                 "private_obs": {"sales": self._sales_model.get_sales(public_obs), }
@@ -147,11 +209,14 @@ class GelateriaEnv(gym.Env):
 
     def get_info(self):
         """Return the info of the environment."""
+
+        assert self._state is not None
+
         return {
             "global_reward": self._state.global_reward,
         }
 
-    def step(self, action: List[float]):
+    def step(self, action: Union[List[float], List[int]]):
         """
         Perform an action in the environment.
 
@@ -164,6 +229,9 @@ class GelateriaEnv(gym.Env):
             is_terminal: Whether the episode has terminated.
             info: The info of the environment.
         """
+
+        assert self._state is not None, "The environment must be reset before stepping it."
+
         self._update_markdowns(action, self._state)
         observations = self.get_observations(self._state)
         self._update_internal(observations)
@@ -182,8 +250,24 @@ class GelateriaEnv(gym.Env):
 
         return observations, self._state.local_reward, self._state.is_terminal, self.get_info()
 
+    def get_single_observation_space_size(self):
+        """Return the observation space size of a single agent. Public observations only."""
+        assert self._state is not None
+        return self._state.get_public_observations().shape
+
+    @property
+    def product_stocks(self)->List[int]:
+        assert self._state is not None
+        return [product.stock for product in self._state.products.values()]
+
+    @property
+    def per_product_done_signal(self)->List[bool]:
+        assert self._state is not None
+        return [product.stock == 0 for product in self._state.products.values()]
+
     @override(gym.Env)
     def reset(self):
+
         """Reset the environment."""
         self._state = deepcopy(self._init_state)
 
