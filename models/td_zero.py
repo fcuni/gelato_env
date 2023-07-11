@@ -1,3 +1,4 @@
+from collections import deque
 import logging
 import pickle
 from copy import deepcopy
@@ -12,6 +13,7 @@ from env.gelateria_env import GelateriaEnv
 from models.base_rl_agent import RLAgent
 from utils.config import OptimiserConfig
 from utils.misc import first_not_none
+import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -147,41 +149,73 @@ class TDZero(RLAgent):
         """
         Trains the agent.
         """
+        average10 = deque(maxlen=10)
+        total_steps = 0
+        episodes = 1000
+        wandb_config = {
+            "algorithm": "TD_Zero",
+            "episodes": episodes,
+            "environment": "gelateria"
 
-        self._env.reset()
-        if self._warm_start is not None:
-            logger.info(f"Warm starting for {self._warm_start} steps.")
-            for _ in range(self._warm_start):
-                self._env.reset()
-                no_op = [0] * self._env.state_space_size[0]
-                self._env.step(no_op)
+        }
+        with wandb.init(project="msc_project", entity="timc", config=wandb_config):
 
-        for epi in tqdm.tqdm(range(self._n_episodes)):
-            if epi % 100 == 0:
-                # logger.info(f"Episode {epi + 1}/{self._n_episodes}")
-                pass
+            self._env.reset()
+            if self._warm_start is not None:
+                logger.info(f"Warm starting for {self._warm_start} steps.")
+                for _ in range(self._warm_start):
+                    self._env.reset()
+                    no_op = [0] * self._env.state_space_size[0]
+                    self._env.step(no_op)
 
-            env = deepcopy(self._env)
-            st_0 = [product.stock for product in env.state.products.values()]
-            is_terminal = False
-            self._G = np.zeros(self._dims[0], dtype=np.float16)
+            
 
-            for step in range(self._horizon_steps):
-                if is_terminal:
-                    # logger.info("Reached terminal state, ending episode.")
-                    break
-                mask = env.mask_actions()
-                a_i = self._select_action(current_stock=st_0, mask=mask)
-                _, r_i, is_terminal, _ = env.step(a_i)
-                r_i = [r for r in r_i.values()]
-                st_i = [product.stock for product in env.state.products.values()]
-                step = StateQuad(st_0, a_i, r_i, st_i)
-                self._train_step(step)
-                st_0 = st_i
+            
+            for epi in tqdm.tqdm(range(episodes)):
+            # for epi in tqdm.tqdm(range(self._n_episodes)):
+                if epi % 100 == 0:
+                    # logger.info(f"Episode {epi + 1}/{self._n_episodes}")
+                    pass
 
-            self._policy = np.round(np.argmax(self._Q, axis=-1) / 100, 2)
-            self._rewards += [env.state.global_reward]
-            self._discounted_rewards += [self._G.tolist()]
+                env = deepcopy(self._env)
+                st_0 = [product.stock for product in env.state.products.values()]
+                is_terminal = False
+                self._G = np.zeros(self._dims[0], dtype=np.float16)
+                episode_steps = 0
+
+                for step in range(self._horizon_steps):
+                    if is_terminal:
+                        # logger.info("Reached terminal state, ending episode.")
+                        break
+                    mask = env.mask_actions()
+                    a_i = self._select_action(current_stock=st_0, mask=mask)
+                    _, r_i, is_terminal, _ = env.step(a_i)
+                    r_i = [r for r in r_i.values()]
+                    st_i = [product.stock for product in env.state.products.values()]
+                    step = StateQuad(st_0, a_i, r_i, st_i)
+                    self._train_step(step)
+                    st_0 = st_i
+                    episode_steps += 1
+
+                self._policy = np.round(np.argmax(self._Q, axis=-1) / 100, 2)
+                self._rewards += [env.state.global_reward]
+                self._discounted_rewards += [self._G.tolist()]
+
+                average10.append(env.state.global_reward)
+                total_steps += episode_steps
+
+                wandb.log({"Reward": env.state.global_reward,
+                        "Average10": np.mean(average10),
+                        "Episodic steps": episode_steps,
+                        "Steps": total_steps,
+                        # "Policy Loss": policy_loss,
+                        # "Alpha Loss": alpha_loss,
+                        # "Bellmann error 1": bellmann_error1,
+                        # "Bellmann error 2": bellmann_error2,
+                        # "Alpha": current_alpha,
+                        "Episode": epi,
+                        })
+
 
     def save(self):
         """Saves the model to disk."""

@@ -208,7 +208,7 @@ class SACAgent(nn.Module):
 
         # TODO: save to config
         buffer_size = 10000
-        batch_size = 500
+        batch_size = 1
         episodes = 1000
 
         wandb_config = {
@@ -245,6 +245,8 @@ class SACAgent(nn.Module):
                     policy_loss, alpha_loss, bellmann_error1, bellmann_error2, current_alpha = self.learn(steps, buffer.sample(), gamma=0.99)
                     state = next_state
                     rewards += np.sum(list(reward.values()))
+                    if rewards >300:
+                        pass
                     episode_steps += 1
                     if done:
                         break
