@@ -1,7 +1,7 @@
 from data_generators.data_generators import DataGenerator
 from env.gelateria_env import GelateriaEnv
 from env.reward.simple_reward import SimpleReward
-# from models.mlp_sales import MLPLogSalesModel
+from models.mlp_sales import MLPLogSalesModel
 from models.simple_sales import SimpleLinearSalesModel
 
 # from models.td_zero import TDZero
@@ -28,7 +28,7 @@ class SACExperiment:
     def get_supervised_model(self):
         dummy_dataloader, _ = self._get_dataset_generator().get_train_val_dataloaders()
         input_dim = next(iter(dummy_dataloader))["public_obs"].shape[-1]
-        # model = MLPLogSalesModel(input_dim=input_dim, name="mlp_sales", config=self._config.net_config)
+        #model = MLPLogSalesModel(input_dim=input_dim, name="mlp_sales", config=self._config.net_config)
         model = SimpleLinearSalesModel(input_dim=input_dim, name="simple_sales", config=self._config.net_config)
         model.load()
         return model

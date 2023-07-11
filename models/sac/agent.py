@@ -216,11 +216,12 @@ class SACAgent(nn.Module):
             "episodes": episodes,
             "buffer_size": buffer_size,
             "batch_size": batch_size,
-            "environment": "gelateria"
+            "environment": "gelateria",
+            "sales_model": self._env._sales_model.name
 
         }
 
-        with wandb.init(project="msc_project", entity="timc", config=wandb_config):
+        with wandb.init(project="msc_project", entity="timc", config=wandb_config, mode="offline"):
         
 
             wandb.watch(self, log="gradients", log_freq=10)
