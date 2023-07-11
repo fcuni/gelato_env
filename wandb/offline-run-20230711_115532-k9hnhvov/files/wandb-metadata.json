@@ -1,0 +1,34 @@
+{
+    "os": "macOS-12.5-arm64-arm-64bit",
+    "python": "3.9.7",
+    "heartbeatAt": "2023-07-11T10:55:32.692667",
+    "startedAt": "2023-07-11T10:55:32.628227",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/Users/uke12405194/Project/gelato_env/run_sac_experiment.py",
+    "codePath": "run_sac_experiment.py",
+    "git": {
+        "remote": "https://github.com/fcuni/gelato_env.git",
+        "commit": "9bc32013492e6fe408a3bb0642703b6364ffc56e"
+    },
+    "email": "31647397+timothyc824@users.noreply.github.com",
+    "root": "/Users/uke12405194/Project/gelato_env",
+    "host": "UKML6V292LW9",
+    "username": "uke12405194",
+    "executable": "/Users/uke12405194/miniconda3/envs/test2/bin/python",
+    "cpu_count": 8,
+    "cpu_count_logical": 8,
+    "disk": {
+        "total": 460.4317207336426,
+        "used": 76.32450485229492
+    },
+    "gpuapple": {
+        "type": "arm",
+        "vendor": "Apple"
+    },
+    "memory": {
+        "total": 16.0
+    }
+}
