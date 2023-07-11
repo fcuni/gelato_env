@@ -1,10 +1,10 @@
 from copy import deepcopy
-from typing import List, Optional, Callable, Dict, Any, Union
+from typing import List, Optional, Callable, Dict, Any, Union, Sequence
 import logging
 
 import gym
-from gym.spaces import Box, Discrete
-#import gymnasium as gym
+from gym.spaces import Box, Discrete, MultiBinary
+# import gymnasium as gym
 import numpy as np
 from ray.rllib.utils import override
 import torch
@@ -21,38 +21,35 @@ from env.mask.simple_masks import IdentityMask
 logger = logging.getLogger(name=__name__)
 
 
-class OneHotEncoding(gym.Space):
-    """
-    {0,...,1,...,0}
+class OneHotEncoding(MultiBinary):
+    def __init__(self, n: Union[np.ndarray, Sequence[int], int], seed: Optional[Union[int, np.random.Generator]] = None):
+        assert isinstance(n, int), "n must be an int"
+        super().__init__(n=n, seed=seed)
 
-    Example usage:
-    self.observation_space = OneHotEncoding(size=4)
-    """
-    def __init__(self, size=None):
-        assert isinstance(size, int) and size > 0
-        self.size = size
-        gym.Space.__init__(self, (), np.int64)
+    def sample(self, mask: Optional[np.ndarray] = None) -> np.ndarray:
+        one_hot_arr = np.zeros(self.n, dtype=self.dtype)
+        index = self.np_random.integers(low=0, high=self.n, dtype=int)
+        one_hot_arr[index] = 1
+        return one_hot_arr
 
-    def sample(self):
-        one_hot_vector = np.zeros(self.size)
-        one_hot_vector[np.random.randint(self.size)] = 1
-        return one_hot_vector
+    def contains(self, x) -> bool:
+        """Return boolean specifying if x is a valid member of this space."""
+        if isinstance(x, Sequence):
+            x = np.array(x)  # Promote list to array for contains check
 
-    def contains(self, x):
-        if isinstance(x, (list, tuple, np.ndarray)):
-            number_of_zeros = list(x).contains(0)
-            number_of_ones = list(x).contains(1)
-            return (number_of_zeros == (self.size - 1)) and (number_of_ones == 1)
-        else:
-            return False
+        return bool(
+            isinstance(x, np.ndarray)
+            and self.shape == x.shape
+            and np.all((x == 0) | (x == 1))
+            and np.sum(x) == 1
+        )
 
     def __repr__(self):
-        return "OneHotEncoding(%d)" % self.size
+        return "OneHotEncoding(%d)" % self.n
 
     def __eq__(self, other):
-        return self.size == other.size
-    
-    
+        return self.n == other.n
+
 
 class GelateriaEnv(gym.Env):
 
@@ -91,16 +88,15 @@ class GelateriaEnv(gym.Env):
         self._max_steps = max_steps
         self._mask = first_not_none(mask_fn, IdentityMask)()
 
-        
-        spaces = {
-            'day_of_year': Box(low=0, high=1, dtype=np.float32), # current day of the date / # of days in the year
-            'stock_level': Box(low=0, high=np.inf, dtype=int),
-            'current_markdowns': Box(low=0, high=1, dtype=np.float32),
+        observation_spaces = {
+            'day_of_year': Box(low=0, high=1, dtype=np.float32),  # current day of the date / # of days in the year
+            'stock_level': Box(low=0, high=1, dtype=np.float32), # 'stock_level': Box(low=0, high=np.inf, dtype=int),
             'base_price': Box(low=0, high=np.inf, dtype=np.float32),
-            'flavour': OneHotEncoding(size=len(Flavour.get_all_flavours()))
+            'current_markdowns': Box(low=0, high=1, dtype=np.float32),
+            'flavour': OneHotEncoding(n=len(Flavour.get_all_flavours()))
         }
-        self.observation_space = gym.spaces.Dict(spaces)
-        self.action_space = Discrete(101) # define the action space as discrete
+        self.observation_space = gym.spaces.Dict(observation_spaces)
+        self.action_space = Discrete(101)  # define the action space as discrete
 
         self.reset()
 
@@ -162,7 +158,8 @@ class GelateriaEnv(gym.Env):
             state: The current state of the environment.
         """
 
-        assert (state.last_markdowns is not None) and (state.current_markdowns is not None) and (state.last_action is not None)
+        assert (state.last_markdowns is not None) and (state.current_markdowns is not None) and (
+                    state.last_action is not None)
 
         for product_id, markdown in zip(state.products, action):
             if isinstance(markdown, int):
@@ -265,14 +262,38 @@ class GelateriaEnv(gym.Env):
         return self._state.get_public_observations().shape
 
     @property
-    def product_stocks(self)->List[int]:
+    def product_stocks(self) -> List[int]:
+        """Return the stock levels of the products in the environment."""
         assert self._state is not None
         return [product.stock for product in self._state.products.values()]
 
     @property
-    def per_product_done_signal(self)->List[bool]:
+    def per_product_done_signal(self) -> List[bool]:
+        """Return the done signal for each product in the environment.
+        The done signal is set to True if the product is out of stock."""
+
         assert self._state is not None
         return [product.stock == 0 for product in self._state.products.values()]
+
+    def sample(self, size: Optional[int] = None) -> np.ndarray:
+        """Sample observations from the environment.
+
+        Args:
+            size: The number of observations to sample. If None, a single observation is sampled.
+        """
+        def sample_one_obs():
+            sampled_obs = self.observation_space.sample()
+            day_of_year = sampled_obs['day_of_year']
+            md = np.round(sampled_obs['current_markdowns'], 2)
+            flavour = sampled_obs['flavour']
+            stock_level = sampled_obs['stock_level']
+            base_price = sampled_obs['base_price']
+            return np.concatenate([day_of_year, stock_level, base_price, md, flavour])
+
+        if size is None:
+            return sample_one_obs()
+        else:
+            return np.array([sample_one_obs() for _ in range(size)])
 
     @override(gym.Env)
     def reset(self):
