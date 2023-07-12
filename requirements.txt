@@ -4,6 +4,11 @@
 #
 #    pip-compile --allow-unsafe --output-file=requirements.txt --resolver=backtracking pyproject.toml
 #
+--extra-index-url https://aim-pypi:2hftbzbne4etrilzl4ofwb23tmsuew7nz2gfbtdwzqciqxo7zwzq@pkgs.dev.azure.com/datasci-aim/_packaging/aim-pypi/pypi/simple/
+--trusted-host pypi.org
+--trusted-host pypi.python.org
+--trusted-host files.pythonhosted.org
+
 aiohttp==3.8.4
     # via fsspec
 aiosignal==1.3.1
@@ -18,12 +23,10 @@ charset-normalizer==3.1.0
     # via
     #   aiohttp
     #   requests
-cmake==3.26.4
-    # via triton
+einops==0.6.1
+    # via Gelato_Pricing_Environment (pyproject.toml)
 filelock==3.12.1
-    # via
-    #   torch
-    #   triton
+    # via torch
 frozenlist==1.3.3
     # via
     #   aiohttp
@@ -38,8 +41,6 @@ jinja2==3.1.2
     # via torch
 lightning-utilities==0.8.0
     # via pytorch-lightning
-lit==16.0.5.post0
-    # via triton
 markupsafe==2.1.3
     # via jinja2
 mpmath==1.3.0
@@ -56,31 +57,6 @@ numpy==1.24.3
     #   pandas
     #   pytorch-lightning
     #   torchmetrics
-nvidia-cublas-cu11==11.10.3.66
-    # via
-    #   nvidia-cudnn-cu11
-    #   nvidia-cusolver-cu11
-    #   torch
-nvidia-cuda-cupti-cu11==11.7.101
-    # via torch
-nvidia-cuda-nvrtc-cu11==11.7.99
-    # via torch
-nvidia-cuda-runtime-cu11==11.7.99
-    # via torch
-nvidia-cudnn-cu11==8.5.0.96
-    # via torch
-nvidia-cufft-cu11==10.9.0.58
-    # via torch
-nvidia-curand-cu11==10.2.10.91
-    # via torch
-nvidia-cusolver-cu11==11.4.0.1
-    # via torch
-nvidia-cusparse-cu11==11.7.4.91
-    # via torch
-nvidia-nccl-cu11==2.14.3
-    # via torch
-nvidia-nvtx-cu11==11.7.91
-    # via torch
 packaging==23.1
     # via
     #   lightning-utilities
@@ -107,15 +83,12 @@ torch==2.0.1
     #   Gelato_Pricing_Environment (pyproject.toml)
     #   pytorch-lightning
     #   torchmetrics
-    #   triton
 torchmetrics==0.11.4
     # via pytorch-lightning
 tqdm==4.65.0
     # via
     #   Gelato_Pricing_Environment (pyproject.toml)
     #   pytorch-lightning
-triton==2.0.0
-    # via torch
 typing-extensions==4.6.3
     # via
     #   lightning-utilities
@@ -125,23 +98,5 @@ tzdata==2023.3
     # via pandas
 urllib3==2.0.3
     # via requests
-wheel==0.40.0
-    # via
-    #   nvidia-cublas-cu11
-    #   nvidia-cuda-cupti-cu11
-    #   nvidia-cuda-runtime-cu11
-    #   nvidia-curand-cu11
-    #   nvidia-cusparse-cu11
-    #   nvidia-nvtx-cu11
 yarl==1.9.2
     # via aiohttp
-
-# The following packages are considered to be unsafe in a requirements file:
-setuptools==67.8.0
-    # via
-    #   nvidia-cublas-cu11
-    #   nvidia-cuda-cupti-cu11
-    #   nvidia-cuda-runtime-cu11
-    #   nvidia-curand-cu11
-    #   nvidia-cusparse-cu11
-    #   nvidia-nvtx-cu11

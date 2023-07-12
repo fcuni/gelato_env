@@ -4,12 +4,21 @@
 #
 #    pip-compile --allow-unsafe --extra=dev --output-file=requirements-dev.txt --resolver=backtracking pyproject.toml
 #
+--extra-index-url https://aim-pypi:2hftbzbne4etrilzl4ofwb23tmsuew7nz2gfbtdwzqciqxo7zwzq@pkgs.dev.azure.com/datasci-aim/_packaging/aim-pypi/pypi/simple/
+--trusted-host pypi.org
+--trusted-host pypi.python.org
+--trusted-host files.pythonhosted.org
+
 aiohttp==3.8.4
     # via fsspec
 aiosignal==1.3.1
     # via aiohttp
 anyio==3.7.0
     # via jupyter-server
+appnope==0.1.3
+    # via
+    #   ipykernel
+    #   ipython
 argon2-cffi==21.3.0
     # via
     #   jupyter-server
@@ -41,8 +50,6 @@ charset-normalizer==3.1.0
     # via
     #   aiohttp
     #   requests
-cmake==3.26.4
-    # via triton
 comm==0.1.3
     # via ipykernel
 debugpy==1.6.7
@@ -51,6 +58,8 @@ decorator==5.1.1
     # via ipython
 defusedxml==0.7.1
     # via nbconvert
+einops==0.6.1
+    # via Gelato_Pricing_Environment (pyproject.toml)
 exceptiongroup==1.1.1
     # via anyio
 executing==1.2.0
@@ -58,9 +67,7 @@ executing==1.2.0
 fastjsonschema==2.17.1
     # via nbformat
 filelock==3.12.1
-    # via
-    #   torch
-    #   triton
+    # via torch
 fqdn==1.5.1
     # via jsonschema
 frozenlist==1.3.3
@@ -157,8 +164,6 @@ jupyterlab-widgets==3.0.7
     # via ipywidgets
 lightning-utilities==0.8.0
     # via pytorch-lightning
-lit==16.0.5.post0
-    # via triton
 markupsafe==2.1.3
     # via
     #   jinja2
@@ -209,31 +214,6 @@ numpy==1.24.3
     #   pandas
     #   pytorch-lightning
     #   torchmetrics
-nvidia-cublas-cu11==11.10.3.66
-    # via
-    #   nvidia-cudnn-cu11
-    #   nvidia-cusolver-cu11
-    #   torch
-nvidia-cuda-cupti-cu11==11.7.101
-    # via torch
-nvidia-cuda-nvrtc-cu11==11.7.99
-    # via torch
-nvidia-cuda-runtime-cu11==11.7.99
-    # via torch
-nvidia-cudnn-cu11==8.5.0.96
-    # via torch
-nvidia-cufft-cu11==10.9.0.58
-    # via torch
-nvidia-curand-cu11==10.2.10.91
-    # via torch
-nvidia-cusolver-cu11==11.4.0.1
-    # via torch
-nvidia-cusparse-cu11==11.7.4.91
-    # via torch
-nvidia-nccl-cu11==2.14.3
-    # via torch
-nvidia-nvtx-cu11==11.7.91
-    # via torch
 overrides==7.3.1
     # via jupyter-server
 packaging==23.1
@@ -355,7 +335,6 @@ torch==2.0.1
     #   Gelato_Pricing_Environment (pyproject.toml)
     #   pytorch-lightning
     #   torchmetrics
-    #   triton
 torchmetrics==0.11.4
     # via pytorch-lightning
 tornado==6.3.2
@@ -388,8 +367,6 @@ traitlets==5.9.0
     #   nbformat
     #   notebook
     #   qtconsole
-triton==2.0.0
-    # via torch
 typing-extensions==4.6.3
     # via
     #   ipython
@@ -412,27 +389,9 @@ webencodings==0.5.1
     #   tinycss2
 websocket-client==1.5.3
     # via jupyter-server
-wheel==0.40.0
-    # via
-    #   nvidia-cublas-cu11
-    #   nvidia-cuda-cupti-cu11
-    #   nvidia-cuda-runtime-cu11
-    #   nvidia-curand-cu11
-    #   nvidia-cusparse-cu11
-    #   nvidia-nvtx-cu11
 widgetsnbextension==4.0.7
     # via ipywidgets
 yarl==1.9.2
     # via aiohttp
 zipp==3.15.0
     # via importlib-metadata
-
-# The following packages are considered to be unsafe in a requirements file:
-setuptools==67.8.0
-    # via
-    #   nvidia-cublas-cu11
-    #   nvidia-cuda-cupti-cu11
-    #   nvidia-cuda-runtime-cu11
-    #   nvidia-curand-cu11
-    #   nvidia-cusparse-cu11
-    #   nvidia-nvtx-cu11
