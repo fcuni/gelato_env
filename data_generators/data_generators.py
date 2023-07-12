@@ -23,7 +23,7 @@ class PandasDataset(Dataset):
     def _prep_data(self, data: pd.DataFrame):
         log_labels = torch.log(1 + torch.from_numpy(data[[self._target_name]].to_numpy()))
         days = torch.from_numpy(data[["day"]].to_numpy()) / 365
-        stock = torch.from_numpy(data[["stock"]].to_numpy()) / 100
+        stock = torch.from_numpy(data[["stock"]].to_numpy()) / data[["stock"]].to_numpy().max()
         flavours = torch.from_numpy(data["flavour"].map(self._flavour_encoding).to_numpy())
         flavours_one_hot = torch.nn.functional.one_hot(flavours, self._n_flavours)
         num_features = torch.from_numpy(data[["price", "markdown"]].to_numpy())
@@ -74,9 +74,6 @@ class DataGenerator:
             probs_sales = self.config.uplift_generator.prob_sales_at_reduction(reds).numpy()
             df["_prob_sales"] = probs_sales
             df["sales"] = expected_sales * probs_sales
-            df["stock_temp"] = df["stock"] - df["sales"].astype(int).shift(1, fill_value=0)
-            df["stock"] = np.clip(df["stock_temp"].to_numpy(), a_min=0, a_max=None)
-            df["sales"] = np.clip(expected_sales * probs_sales, a_min=0, a_max=df["stock"].to_numpy())
             dfs += [df]
         dfs = pd.concat(dfs)
         dfs.sort_values([], axis="columns", inplace=True)
