@@ -15,6 +15,7 @@ dependencies = [
     'pytorch_lightning',
     'torch',
     'tqdm',
+    'einops'
 ]
 
 [project.optional-dependencies]
