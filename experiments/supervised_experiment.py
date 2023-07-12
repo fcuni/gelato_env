@@ -1,12 +1,6 @@
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-import os
-print(os.getcwd())
-
-import sys
-sys.path.append(os.getcwd())
-
 from utils.config import ExperimentConfig
 from data_generators.data_generators import DataGenerator
 from models.mlp_sales import MLPLogSalesModel
