@@ -1,25 +1,25 @@
 repos:
--   repo: https://github.com/psf/black
-    rev: '23.3.0'
-    hooks:
-    -   id: black
-    -   id: black-jupyter
--   repo: https://github.com/PyCQA/isort
-    rev: '5.12.0'
-    hooks:
-    -   id: isort
-        args: ['--profile=black']
--   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: 'v0.0.272'
-    hooks:
-    -   id: ruff
--   repo: https://github.com/jazzband/pip-tools
-    rev: '6.13.0'
-    hooks:
-    -   id: pip-compile
-        name: pip-compile pyproject.toml
-        args: ['pyproject.toml', '--allow-unsafe', '--resolver=backtracking']
-        files: ^(pyproject\.toml|requirements\.txt)$
+    - repo: https://github.com/psf/black
+          rev: '23.7.0'
+          hooks:
+              - id: black
+              - id: black-jupyter
+    - repo: https://github.com/PyCQA/isort
+      rev: '5.12.0'
+      hooks:
+          - id: isort
+            args: [ '--profile=black' ]
+          - repo: https://github.com/charliermarsh/ruff-pre-commit
+            rev: 'v0.0.277'
+                hooks:
+                    - id: ruff
+          - repo: https://github.com/jazzband/pip-tools
+            rev: '6.14.0'
+                hooks:
+                    - id: pip-compile
+                      name: pip-compile pyproject.toml
+                      args: [ 'pyproject.toml', '--allow-unsafe', '--resolver=backtracking' ]
+                      files: ^(pyproject\.toml|requirements\.txt)$
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 'v4.4.0'
     hooks:
