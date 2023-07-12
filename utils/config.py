@@ -55,7 +55,7 @@ class LightningConfig(BaseConfig):
     callbacks: Optional[Union[List[Callback], Callback]] = None
     enable_progress_bar: bool = True
     max_epochs: Optional[int] = 10
-    accelerator: Optional[Union[str, Accelerator]] = "auto"
+    accelerator: Optional[Union[str, Accelerator]] = "cpu"
 
 
 @dataclass
