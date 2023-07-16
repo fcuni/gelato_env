@@ -68,8 +68,10 @@ class SalesUpliftReward(BaseReward):
         if isinstance(self._sales_model, torch.nn.Module):
             could_have_been_observation = could_have_been_observation.to(self._sales_model.device)
         could_have_been_sales_predictions = self._sales_model.get_sales(could_have_been_observation)
-        could_have_been_sales = {product_id: max(0.0, alt_sales.item()) for product_id, alt_sales in
-                                 zip(state.products, could_have_been_sales_predictions)}
+        could_have_been_sales = {
+            product_id: max(0.0, alt_sales.item() if isinstance(could_have_been_sales_predictions,
+                                                                torch.Tensor) else alt_sales)
+            for product_id, alt_sales in zip(state.products, could_have_been_sales_predictions)}
 
         # compute the sales difference between the actual sales and the could-have-been sales
         sales_diff = {
