@@ -2,6 +2,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Dict, Optional, Union, Callable, List
 
+import numpy as np
 import torch
 
 from utils.enums import Flavour
@@ -27,16 +28,47 @@ class GelateriaState:
     day_number: int = 0
     current_markdowns: Optional[Dict[str, float]] = None
     last_markdowns: Optional[Dict[str, float]] = None
-    last_action: Optional[Dict[str, float]] = None
+    last_actions: Optional[Dict[str, List[float]]] = None
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
     is_terminal: bool = False
-    restock_period: int = 7
+    # TODO: set the restock period back to 7 days
+    restock_period: int = 7  # original: 7
+
+    # TODO:to remove after testing
+    sales_days: int = 365
 
     @property
     def n_products(self):
         return len(self.products)
+
+    @property
+    def product_stocks(self) -> List[int]:
+        """Return the stock levels of the products in the environment."""
+        return [product.stock for product in self.products.values()]
+
+    @property
+    def per_product_done_signal(self) -> np.ndarray:
+        """Return the done signal for each product in the environment.
+        The done signal is set to True if the product is out of stock."""
+        return np.array([product.stock == 0 for product in self.products.values()])
+
+    def historical_actions_count(self, product_id: Optional[str] = None) -> Dict[str, int]:
+        """Return the number of times a product has been marked down in the past.
+        If product_id is None, return the number of times of each product that has been marked down in the past.
+
+        Args:
+            product_id: (Optional) The id of the product to return the number of markdowns for.
+
+        Returns:
+            A dictionary mapping product ids to the number of times the product(s) being marked down in the past.
+        """
+        if product_id is None:
+            return {pid: len(self.last_actions[pid]) for pid in self.products}
+
+        assert product_id in self.products, f"Product {product_id} does not exist in the environment."
+        return {product_id: len(self.last_actions[product_id])}
 
     def __post_init__(self):
         self.max_stock = max([product.stock for product in self.products.values()])
@@ -55,15 +87,13 @@ class GelateriaState:
         for product_id, product in self.products.items():
             flavour_encoding = flavour_one_hot[product.flavour.value]
             public_obs_tensor.append(torch.hstack([torch.tensor(self.day_number / 365),
-                                                   torch.tensor(product.stock),#torch.tensor(product.stock / self.max_stock),
+                                                   torch.tensor(product.stock / self.max_stock),
                                                    torch.tensor(product.base_price),
                                                    torch.tensor(self.current_markdowns[product_id]),
                                                    torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
                                                                                n_flavours),
                                                    ]).float())
         return torch.vstack(public_obs_tensor)
-    
-
 
 
 def default_init_state() -> GelateriaState:
@@ -76,7 +106,7 @@ def default_init_state() -> GelateriaState:
         products={product.id: product for product in products},
         current_markdowns={product.id: 0.0 for product in products},
         last_markdowns={product.id: None for product in products},
-        last_action={product.id: [] for product in products},
+        last_actions={product.id: [] for product in products},
         local_reward={product.id: None for product in products},
     )
 
@@ -86,6 +116,6 @@ def init_state_from(products: List[Gelato]) -> GelateriaState:
         products={product.id: product for product in products},
         current_markdowns={product.id: 0.0 for product in products},
         last_markdowns={product.id: None for product in products},
-        last_action={product.id: [] for product in products},
+        last_actions={product.id: [] for product in products},
         local_reward={product.id: None for product in products},
     )

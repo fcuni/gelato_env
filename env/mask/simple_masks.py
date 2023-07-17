@@ -32,7 +32,7 @@ class BooleanMonotonicMarkdownsMask(ActionMask):
     def __init__(self):
         super().__init__(name="BooleanMonotonicMarkdownMask")
 
-    def __call__(self, state: Union[GelateriaState, torch.Tensor])->np.ndarray:
+    def __call__(self, state: Union[GelateriaState, torch.Tensor]) -> np.ndarray:
         if isinstance(state, GelateriaState):
             mask = np.ones((len(state.products), 101))
             for idx, markdown in enumerate(state.current_markdowns.values()):
@@ -42,4 +42,18 @@ class BooleanMonotonicMarkdownsMask(ActionMask):
             for idx, markdown in enumerate(state[:, 3]):
                 mask[idx, :int(markdown * 100)] = 0
        
+        return mask.squeeze().astype(bool)
+
+
+class NoRestrictionBooleanMask(ActionMask):
+    # True: keep, False: mask
+    def __init__(self):
+        super().__init__(name="NoRestrictionBooleanMask")
+
+    def __call__(self, state: Union[GelateriaState, torch.Tensor]) -> np.ndarray:
+        if isinstance(state, GelateriaState):
+            mask = np.ones((len(state.products), 101))
+        else:
+            mask = np.ones((state.shape[0], 101))
+
         return mask.squeeze().astype(bool)

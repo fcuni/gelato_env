@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import List, Optional, Callable, Dict, Any, Union, Sequence
+from typing import List, Optional, Callable, Dict, Any, Union, Sequence, Tuple
 import logging
 
 import gym
@@ -87,10 +87,10 @@ class GelateriaEnv(gym.Env):
         self._global_step = 0
         self._max_steps = max_steps
         self._mask = first_not_none(mask_fn, IdentityMask)()
-
+        # Define the observation and action spaces
         observation_spaces = {
             'day_of_year': Box(low=0, high=1, dtype=np.float32),  # current day of the date / # of days in the year
-            'stock_level': Box(low=0, high=1, dtype=np.float32), # 'stock_level': Box(low=0, high=np.inf, dtype=int),
+            'stock_level': Box(low=0, high=1, dtype=np.float32),  # 'stock_level': Box(low=0, high=np.inf, dtype=int),
             'base_price': Box(low=0, high=np.inf, dtype=np.float32),
             'current_markdowns': Box(low=0, high=1, dtype=np.float32),
             'flavour': OneHotEncoding(n=len(Flavour.get_all_flavours()))
@@ -102,11 +102,22 @@ class GelateriaEnv(gym.Env):
 
     @property
     def name(self):
+        """Return the name of the environment."""
         return self._name
 
     @property
     def sales_model_name(self):
+        """Return the name of the sales model."""
         return self._sales_model.name
+
+    @property
+    def reward_type_name(self):
+        """Return the name of the reward type."""
+        return self._reward.name
+
+    @property
+    def action_mask_name(self):
+        return self._mask.name
 
     @property
     def state(self):
@@ -120,6 +131,11 @@ class GelateriaEnv(gym.Env):
 
         n_flavour = len(self._state.products)
         return n_flavour, self._max_stock + 1, 101
+
+    def set_state(self, state: GelateriaState):
+        """Load the input state as the state of the environment.
+        """
+        self._state = state
 
     def mask_actions(self, state: Optional[GelateriaState] = None) -> np.ndarray:
         """Allow only increasing markdowns."""
@@ -142,37 +158,60 @@ class GelateriaEnv(gym.Env):
         """
         is_terminal = True
         for product_id, product in state.products.items():
+            # if abs(sales[product_id]) >= 1:
+            #     print("stock_level change")
             new_stock_level = round(max(0.0, state.products[product_id].stock - sales[product_id]))
             state.products[product_id].stock = new_stock_level
+            # The episode only terminates if all products are out of stock
             if new_stock_level > 0:
                 is_terminal = False
 
         state.is_terminal = is_terminal
 
     @staticmethod
-    def _update_markdowns(action: Union[List[float], List[int]], state: GelateriaState):
+    def _update_markdowns(action: Union[Sequence[float], Sequence[int]], state: GelateriaState):
         """Update the markdowns of the products in the environment.
 
         Args:
-            action: The markdowns of each product.
+            action: The markdowns of each product. If the markdown is an integer, it is divided by 100.
             state: The current state of the environment.
         """
 
         assert (state.last_markdowns is not None) and (state.current_markdowns is not None) and (
-                    state.last_action is not None)
+                    state.last_actions is not None)
 
         for product_id, markdown in zip(state.products, action):
             if isinstance(markdown, int):
                 markdown = round(markdown / 100, 2)
             elif isinstance(markdown, float):
                 markdown = round(markdown, 2)
+
+            # TODO: remove the markdown action count restriction (only for testing)
+            # if state.historical_actions_count(product_id)[product_id] <= 3:
             state.last_markdowns[product_id] = state.current_markdowns[product_id]
             state.current_markdowns[product_id] = markdown
-            state.last_action[product_id] = markdown
+
+            # Add current markdown to last actions
+            if len(state.last_actions[product_id]) == 0:
+                state.last_actions[product_id].append(markdown)
+
+    def _update_terminal_reward(self, state: GelateriaState, terminal_reward: Dict[str, float]):
+        """Update the reward of the terminal state.
+
+        Args:
+            state: The current state of the environment.
+            terminal_reward: The reward of the terminal state.
+        """
+        assert state.is_terminal
+
+        for product_id in state.products:
+            state.local_reward[product_id] -= terminal_reward[product_id]
+            state.global_reward -= state.local_reward[product_id]
 
     def _update_internal(self,
                          observations: Dict[str, Union[torch.Tensor, Dict]],
-                         from_state: Optional[GelateriaState] = None):
+                         from_state: Optional[GelateriaState] = None,
+                         prev_state: Optional[GelateriaState] = None):
         """Update the internal state of the environment.
 
         Args:
@@ -182,7 +221,8 @@ class GelateriaEnv(gym.Env):
         state = first_not_none(from_state, self._state)
         sales = {product_id: max(0, sales.item())
                  for product_id, sales in zip(state.products, observations["private_obs"]["sales"])}
-        local_reward = self._reward(sales, state)
+
+        local_reward = self._reward(sales=sales, state=state, previous_state=prev_state)
         self._update_stock(sales, state)
 
         state.local_reward = local_reward
@@ -210,7 +250,7 @@ class GelateriaEnv(gym.Env):
 
         public_obs = state.get_public_observations()
         return {"public_obs": public_obs,
-                "private_obs": {"sales": self._sales_model.get_sales(public_obs), }
+                "private_obs": {"sales": self._sales_model.get_sales(public_obs)}
                 }
 
     def get_info(self):
@@ -222,12 +262,14 @@ class GelateriaEnv(gym.Env):
             "global_reward": self._state.global_reward,
         }
 
-    def step(self, action: Union[List[float], List[int]]):
+    def step(self, action: Union[List[float], List[int], np.ndarray, torch.Tensor], action_dtype: Optional[str] = None):
         """
         Perform an action in the environment.
 
         Args:
             action: The markdowns for each product.
+            action_dtype: [Optional] The date type of the actions. For example, if action_dtype == int, they will be
+                automatically divided by 100 to fit in the range of [0,1].
 
         Returns:
             observations: The observations of the environment.
@@ -237,43 +279,43 @@ class GelateriaEnv(gym.Env):
         """
 
         assert self._state is not None, "The environment must be reset before stepping it."
-
+        if action_dtype is not None:
+            if action_dtype == "int":
+                if isinstance(action, List):
+                    for i in range(len(action)):
+                        action[i] = round(action[i]/100, 2)
+                elif isinstance(action, np.ndarray):
+                    action = np.round(action.astype(int)/100, 2)
+                elif isinstance(action, torch.Tensor):
+                    action = np.round(action.int().numpy()/100, 2)
+                else:
+                    raise ValueError("The action must be a list, a numpy array or a torch tensor.")
+        prev_state = deepcopy(self._state)
         self._update_markdowns(action, self._state)
         observations = self.get_observations(self._state)
-        self._update_internal(observations)
+        self._update_internal(observations, prev_state=prev_state)
+        updated_observations = self.get_observations(self._state)
 
         if self._global_step >= self._max_steps:
             self._state.is_terminal = True
             logger.info(f"The episode has terminated after reaching the max number of "
                         f"steps.")
 
+        # TODO: check if this is the right way to incorporate the terminal penalty
         if self._state.is_terminal:
             # logger.info(f"The episode has terminated after {self._global_step} steps.")
             try:
-                self._reward.get_terminal_penalty(self._state)
+                terminal_penalty: Dict[str, float] = self._reward.get_terminal_penalty(self._state)
+                self._update_terminal_reward(self._state, terminal_penalty)
             except NotImplementedError:
                 pass
 
-        return observations, self._state.local_reward, self._state.is_terminal, self.get_info()
+        return updated_observations, self._state.local_reward, self._state.is_terminal, self.get_info()
 
     def get_single_observation_space_size(self):
         """Return the observation space size of a single agent. Public observations only."""
         assert self._state is not None
         return self._state.get_public_observations().shape
-
-    @property
-    def product_stocks(self) -> List[int]:
-        """Return the stock levels of the products in the environment."""
-        assert self._state is not None
-        return [product.stock for product in self._state.products.values()]
-
-    @property
-    def per_product_done_signal(self) -> List[bool]:
-        """Return the done signal for each product in the environment.
-        The done signal is set to True if the product is out of stock."""
-
-        assert self._state is not None
-        return [product.stock == 0 for product in self._state.products.values()]
 
     def sample(self, size: Optional[int] = None) -> np.ndarray:
         """Sample observations from the environment.
@@ -283,9 +325,15 @@ class GelateriaEnv(gym.Env):
         """
         def sample_one_obs():
             sampled_obs = self.observation_space.sample()
-            day_of_year = sampled_obs['day_of_year']
+            # TODO: check if we want to keep 365 in config
+            day_of_year = np.clip(np.round(sampled_obs['day_of_year']*365), a_min=0, a_max=365)/365
             md = np.round(sampled_obs['current_markdowns'], 2)
-            flavour = sampled_obs['flavour']
+            # [RANDOM PRODUCT APPROACH]: sample a product from the flavour encoding index of each product available in
+            #   the Gelato shop
+            random_product = np.random.choice([Flavour.get_flavour_encoding()[self._state.products[
+                list(self._state.products.keys())[i]].flavour.value] for i in range(self._state.n_products)])
+            flavour = np.zeros(len(Flavour.get_all_flavours()), dtype=np.float32)
+            flavour[random_product] = 1.0
             stock_level = sampled_obs['stock_level']
             base_price = sampled_obs['base_price']
             return np.concatenate([day_of_year, stock_level, base_price, md, flavour])
@@ -294,6 +342,48 @@ class GelateriaEnv(gym.Env):
             return sample_one_obs()
         else:
             return np.array([sample_one_obs() for _ in range(size)])
+
+    def sample_from_current_store(self) -> Tuple[GelateriaState, np.ndarray]:
+        """Sample observations from the current store (based on the products in the store)
+
+        Returns:
+            sampled_state: A sampled state of the environment.
+            sampled_observation: The public observation of the sampled observation.
+        """
+        assert self._state is not None, "The environment must be reset before sampling from it."
+        current_obs = self._state.get_public_observations()
+        sampled_obs = self.sample(size=self._state.n_products)
+        day_of_year = (np.array([sampled_obs[0, 0]]*self._state.n_products)).reshape(-1, 1)
+        stock_level = (np.round(self._state.max_stock * sampled_obs[:, 1])/self._state.max_stock).reshape(-1, 1)
+        base_price = current_obs[:, 2].reshape(-1, 1)
+        md = sampled_obs[:, 3].reshape(-1, 1)
+        flavour = current_obs[:, -len(Flavour.get_all_flavours()):]
+        sampled_observation = np.concatenate([day_of_year, stock_level, base_price, md, flavour], axis=1)
+
+        sampled_state = deepcopy(self._init_state)
+        sampled_state.day_number = round(day_of_year[0, 0] * 365)
+
+        for i, key in enumerate(sampled_state.products.keys()):
+            sampled_state.products[key].stock = round(stock_level[i, 0] * sampled_state.max_stock)
+            sampled_state.current_markdowns[key] = md[i, 0]
+            # sampled_state.last_markdowns[key] = md[i, 0]
+            # sampled_state.last_actions[key].append(md[i, 0])
+
+        return sampled_state, sampled_observation
+
+
+# def hallucinate(self, size: Optional[int] = None) -> np.ndarray:
+#         """Sample observations from the environment.
+#
+#         Args:
+#             size: The number of observations to sample. If None, a single observation is sampled.
+#         """
+#         sample_obs = self.sample()
+#         sample_state = deepcopy(self._state)
+#         sample_state.day_number = np.clip(np.round(sample_obs[0]*365), a_min=0, a_max=365)
+#         sample_state.stock_level = sample_obs[1]
+
+
 
     @override(gym.Env)
     def reset(self):

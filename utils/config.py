@@ -22,6 +22,7 @@ from data_generators.gaussian_generators import StrongSeasonalGaussian
 from data_generators.generator import Generator
 from data_generators.sigmoid_generators import SigmoidGaussian
 from env.gelateria import GelateriaState, default_init_state
+from env.mask.simple_masks import BooleanMonotonicMarkdownsMask, NoRestrictionBooleanMask
 from utils.misc import custom_collate_fn, get_root_dir
 
 ROOT_DIR = get_root_dir()
@@ -91,7 +92,7 @@ class DataLoaderConfig(BaseConfig):
 
 @dataclass
 class OptimiserConfig(BaseConfig):
-    n_episodes: int = 100
+    n_episodes: int = 10000
     horizon_steps: int = 10
     epsilon: float = 0.9
     gamma: float = 0.9
@@ -106,18 +107,26 @@ class OptimiserConfig(BaseConfig):
 class SACConfig(BaseConfig):
     n_episodes: int = 1000
     gamma: float = 0.99
-    tau: float = 1e-2
+    tau: float = 1e-2 #1.0  # oldsac 1e-2
     learning_rate: float = 5e-4
-    buffer_size: int = 10000
-    batch_size: int = 1
-    initial_random_steps: int = 1000
+    buffer_size: int = 500000
+    batch_size: int = 200
+    initial_random_steps: int = 100000
+    target_network_frequency: int = 8000
+    auto_entropy_tuning: bool = True
+    save_buffer: bool = True
+    target_entropy_scale: float = 0.89
+    markdown_penalty: float = 1.0
+    waste_penalty: float = 0.0
+    mask_fn: Callable = BooleanMonotonicMarkdownsMask
 
 
 @dataclass
 class WandbConfig(BaseConfig):
+    use_wandb: bool = True
     project: str = "msc_project"
     entity: str = "timc"
-    mode: str = "offline"
+    mode: str = "online"
 
 
 @dataclass
