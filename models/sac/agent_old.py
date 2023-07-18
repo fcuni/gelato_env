@@ -8,41 +8,31 @@ import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
 import wandb
 from env.gelateria import GelateriaState
-from models.sac.buffer import ReplayBuffer
-from models.sac.networks import CriticNetwork, ActorNetwork
+from utils.buffer import ReplayBuffer
+from models.sac.networks import SoftQNetwork, ActorNetwork
 import copy
 
+from utils.config import SACExperimentConfig
 from utils.misc import first_not_none, get_flatten_observation_from_state
 
-from models.sac.utils import collect_random
+from models.sac.utils import collect_random, collect_random_v2
 
 
 class SACAgent(nn.Module):
     """Interacts with and learns from the environment."""
 
-    # def __init__(self,
-    #                     state_size,
-    #                     action_size,
-    #                     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #             ):
     def __init__(self,
                  env,
-                 config,
+                 config: SACExperimentConfig,
                  name: str = "SAC_Discrete",
                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
                  ):
         """Initialize an Agent object.
-        
-        Params
-        ======
-            state_size (int): dimension of each state
-            action_size (int): dimension of each action
-            random_seed (int): random seed
+
         """
         super(SACAgent, self).__init__()
         self._name = name
         self._env = env
-        self._dims = tuple(env.state_space_size)
         self.state_size = tuple(env.get_single_observation_space_size())[-1]
         self.action_size = self._env.action_space.n
 
@@ -68,15 +58,15 @@ class SACAgent(nn.Module):
 
         # Critic Network (w/ Target Network)
 
-        self.critic1 = CriticNetwork(self.state_size, self.action_size, seed=2).to(device)
-        self.critic2 = CriticNetwork(self.state_size, self.action_size, seed=1).to(device)
+        self.critic1 = SoftQNetwork(self.state_size, self.action_size, seed=2).to(device)
+        self.critic2 = SoftQNetwork(self.state_size, self.action_size, seed=1).to(device)
 
         assert self.critic1.parameters() != self.critic2.parameters()
 
-        self.critic1_target = CriticNetwork(self.state_size, self.action_size).to(device)
+        self.critic1_target = SoftQNetwork(self.state_size, self.action_size).to(device)
         self.critic1_target.load_state_dict(self.critic1.state_dict())
 
-        self.critic2_target = CriticNetwork(self.state_size, self.action_size).to(device)
+        self.critic2_target = SoftQNetwork(self.state_size, self.action_size).to(device)
         self.critic2_target.load_state_dict(self.critic2.state_dict())
 
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=learning_rate)
@@ -151,7 +141,7 @@ class SACAgent(nn.Module):
             # TODO: check if need to do something to mask logits and action probs
             # should check the value of Q_target1_next and Q_target2_next
             Q_target_next = action_probs * (
-                        torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * log_pis)
+                    torch.min(Q_target1_next, Q_target2_next) - self.alpha.to(self.device) * log_pis)
 
             # Compute Q targets for current states (y_i)
             Q_targets = rewards + (gamma * (1 - dones) * Q_target_next.sum(dim=1).unsqueeze(-1))
@@ -191,7 +181,8 @@ class SACAgent(nn.Module):
             tau (float): interpolation parameter 
         """
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-            target_param.data.copy_(self._config.sac_config.tau * local_param.data + (1.0 - self._config.sac_config.tau) * target_param.data)
+            target_param.data.copy_(self._config.sac_config.tau * local_param.data + (
+                        1.0 - self._config.sac_config.tau) * target_param.data)
 
     def train(self):
         # np.random.seed(config.seed)
@@ -212,7 +203,8 @@ class SACAgent(nn.Module):
             "buffer_size": buffer_size,
             "batch_size": batch_size,
             "environment": self._env.name,
-            "sales_model": self._env.sales_model_name
+            "sales_model": self._env.sales_model_name,
+            "reward_type": self._env.reward_type_name
 
         }
 
@@ -223,8 +215,10 @@ class SACAgent(nn.Module):
 
             buffer = ReplayBuffer(buffer_size=buffer_size, batch_size=batch_size, device=self.device)
 
-            collect_random(env=self._env, dataset=buffer, num_samples=self._config.sac_config.initial_random_steps,
-                           state_transform_fn=self.state_transform_fn)
+            # collect_random(env=self._env, dataset=buffer, num_samples=self._config.sac_config.initial_random_steps,
+            #                state_transform_fn=self.state_transform_fn)
+            collect_random_v2(self._env, dataset=buffer, num_samples=self._config.sac_config.initial_random_steps,
+                              state_transform_fn=get_flatten_observation_from_state)
 
             for i in range(1, n_episodes + 1):
                 print(f"Episode {i} starting...")
@@ -233,25 +227,25 @@ class SACAgent(nn.Module):
                 episode_steps = 0
                 rewards = 0
                 while True:
-                    # print(state)
+
                     action = self.get_action(state)
                     steps += 1
-                    next_state, reward, done, _ = self._env.step(action)
+                    next_state, reward, done, _ = self._env.step(action, action_dtype="int")
                     buffer.add(self.state_transform_fn(state), action, list(reward.values()),
-                               self.state_transform_fn(next_state), self._env.per_product_done_signal)
+                               self.state_transform_fn(next_state), self._env.state.per_product_done_signal)
                     policy_loss, alpha_loss, bellmann_error1, bellmann_error2, current_alpha = self.learn(
                         buffer.sample(), gamma=self._config.sac_config.gamma)
                     state = next_state
                     rewards += np.sum(list(reward.values()))
-                    # if rewards >300:
-                    #     pass
+
                     episode_steps += 1
+                    print(f"actions {list(self._env.state.last_actions.values())}")
                     if done:
                         break
-                    print(f"[{episode_steps}] next state: {next_state}, reward: {reward}, done: {done}")
+                    # print(f"[{episode_steps}] next state: {next_state}, reward: {reward}, done: {done}")
 
                 average10.append(rewards)
-                print("Episode: {} | Reward: {} | Polciy Loss: {} | Steps: {}".format(i, rewards, policy_loss, steps, ))
+                print(f"Episode: {i} | Reward: {rewards} | Polciy Loss: {policy_loss} | Steps: {episode_steps}")
 
                 wandb.log({"Reward": rewards,
                            "Average10": np.mean(average10),
@@ -263,4 +257,6 @@ class SACAgent(nn.Module):
                            "Alpha": current_alpha,
                            "Steps": steps,
                            "Episode": i,
-                           "Buffer size": buffer.__len__()})
+                           "Buffer size": buffer.__len__()
+                           # "Actions": {list(self._env.state.last_actions.values())}
+                           })

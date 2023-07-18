@@ -6,13 +6,18 @@ import random
 
 import pandas as pd
 import torch
-from collections import deque, namedtuple
+from collections import deque
 
+from utils.misc import Experience
+
+import pickle
 
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
 
-    def __init__(self, buffer_size, batch_size, device):
+    def __init__(self, buffer_size, batch_size,
+                 seed: Optional[int] = None,
+                 device: Optional[torch.device] = None):
         """Initialize a ReplayBuffer object.
         Params
         ======
@@ -20,14 +25,49 @@ class ReplayBuffer:
             batch_size (int): size of each training batch
             seed (int): random seed
         """
+        if device is None:
+            device = torch.device("cpu")
         self.device = device
         self.memory = deque(maxlen=buffer_size)
         self.batch_size = batch_size
-        self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+        self.experience = Experience
+        if seed is not None:
+            random.seed(seed)
+            self.seed = seed
+
+    def to_csv(self, path: Path):
+        """Save the buffer to a CSV file."""
+        pd.DataFrame(self.memory).to_csv(path)
 
     def save(self, path: Path):
         """Save the buffer to a file."""
-        pd.DataFrame(self.memory).to_csv(path)
+        if path.is_dir():
+            # create the directory and its parent directories, if they doesn't exist
+            path.mkdir(parents=True, exist_ok=True)
+            # append file name to the path (since it is not given)
+            path = path / "buffer.pkl"
+        else:
+            # create the parent directories if they don't exist
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+        # save the buffer to the file
+        pickle.dump(self.memory, open(path, 'wb'))
+
+    def load(self, path: Optional[Path] = None):
+        """Load the buffer from a file.
+
+        Args:
+            path: Path to the file to load. If `None`, no file will be loaded.
+        """
+
+        if path is None:
+            print(f"No buffer file path given, a new buffer will be created")
+            return
+        if not path.exists():
+            print(f"Buffer file {path} does not exist")
+            return
+        # TODO: check if the following file loading logic is good enough
+        self.memory = pickle.load(open(path, 'rb'))
 
     def add(self, state: Sequence[Any], action: Sequence[Union[int, float]], reward: Sequence[float], next_state: Sequence[Any], done: Sequence[bool]):
         """Add a new experience to memory."""

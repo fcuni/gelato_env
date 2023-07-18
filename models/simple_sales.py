@@ -23,6 +23,7 @@ class SimpleLinearSalesModel(nn.Module):
         self._name = name
         self._optim = config.optim
         self._model = self.get_simple_prediction
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def get_simple_prediction(self, inventory:torch.Tensor, markdown:torch.Tensor):
         

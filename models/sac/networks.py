@@ -1,16 +1,20 @@
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union, Sequence
 import torch
 import torch.nn as nn
 from pathlib import Path
 import os
 import numpy as np
-from env.mask.action_mask import ActionMask
+from utils.misc import first_not_none
+from utils.distributions import CategoricalMasked
 
-from utils.misc import CategoricalMasked, first_not_none
+
+def hidden_init(layer):
+    fan_in = layer.weight.data.size()[0]
+    lim = 1. / np.sqrt(fan_in)
+    return -lim, lim
 
 
 class BaseNetwork(nn.Module):
-
     def save(self, path: Path):
         os.makedirs(path, exist_ok=True)
         torch.save(self.state_dict(), path)
@@ -20,23 +24,21 @@ class BaseNetwork(nn.Module):
             self.load_state_dict(torch.load(path))
         else:
             raise FileNotFoundError(f"File {path} not found")
-        
+
 
 class ActorNetwork(BaseNetwork):
-    
+    def __init__(self, num_observation: int, num_action: int, hidden_layers: Optional[Sequence[int]] = (32, 64),
+                 activation: Optional[str] = "ReLU"):
+        """Initialize parameters and build actor network.
 
-    def __init__(self, num_observation:int, num_action:int, hidden_layers:Optional[List[int]]=[32,64], activation:Optional[str] = "ReLU"):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-            seed (int): Random seed
-            fc1_units (int): Number of nodes in first hidden layer
-            fc2_units (int): Number of nodes in second hidden layer
+        Args:
+            num_observation (int): Dimension of each state observation
+            num_action (int): Dimension of each action
+            hidden_layers (list): Number of nodes in hidden layers of the network (default: (32, 64))
+            activation (str): Activation function to use between hidden layers (default: "ReLU")
         """
         super(ActorNetwork, self).__init__()
-        
+
         in_dim = num_observation
         layers = []
         if hidden_layers is not None:
@@ -48,40 +50,33 @@ class ActorNetwork(BaseNetwork):
         layers += [nn.Linear(in_features=in_dim, out_features=num_action)]
         layers += [nn.Softmax(dim=-1)]
         self._model = nn.Sequential(*layers)
-    
 
     def forward(self, state):
         """Build an actor (policy) network that maps states -> actions."""
         action_probs = self._model(state)
         return action_probs
-    
-    def evaluate(self, state, epsilon=1e-6, mask: Optional[np.ndarray] = None) -> Tuple[List[float], torch.Tensor, torch.Tensor]:
-        action_probs = self.forward(state)
+
+    def evaluate(self, state_obs, epsilon=1e-6, mask: Optional[np.ndarray] = None) \
+            -> Tuple[Sequence[float], torch.Tensor, torch.Tensor]:
+
+        action_probs = self.forward(state_obs)
         if mask is None:
             mask = np.ones(action_probs.shape, dtype=bool)
         mask_tensor = torch.tensor(mask, dtype=torch.bool)
 
-        # filter out the products that have no available actions
-        # filtered_action_probs = action_probs[mask_tensor.any(dim=-1)]
-        # filtered_mask_tensor = mask_tensor[mask_tensor.any(dim=-1)]
-
-        # dist = CategoricalMasked(probs=filtered_action_probs, mask=filtered_mask_tensor)
         dist = CategoricalMasked(probs=action_probs, mask=mask_tensor)
         with torch.no_grad():
-            action_numpy = np.array([None]*len(action_probs))
+            action_numpy = np.array([None] * len(action_probs))
             action_numpy[mask_tensor.any(dim=-1).numpy()] = (dist.sample().detach().cpu().int()).numpy()
-            action = action_numpy.tolist()
+            action = action_numpy  # .tolist()
 
-        # action_probs[~mask_tensor.any(dim=-1),:] = 0.0
         # deal with cases where probabilities are 0 before taking the log
         z = action_probs == 0.0
         z = z.float() * epsilon
         log_action_probabilities = torch.log(action_probs + z)
-        
-        return action, action_probs, log_action_probabilities        
-    
-    
-    def get_det_action(self, state_obs: torch.Tensor, mask: Optional[np.ndarray] = None)->List[Optional[Union[int, float]]]:
+        return action, action_probs, log_action_probabilities
+
+    def get_det_action(self, state_obs: torch.Tensor, mask: Optional[np.ndarray] = None) -> np.ndarray:
         with torch.no_grad():
             action_probs = self.forward(state_obs)
             if mask is None:
@@ -93,20 +88,16 @@ class ActorNetwork(BaseNetwork):
             filtered_mask_tensor = mask_tensor[mask_tensor.any(dim=-1)]
 
             dist = CategoricalMasked(probs=filtered_action_probs, mask=filtered_mask_tensor)
-            action_numpy = np.array([None]*len(action_probs))
+            action_numpy = np.array([None] * len(action_probs))
             action_numpy[mask_tensor.any(dim=-1)] = (dist.sample().detach().cpu().int()).numpy()
-            action = action_numpy.tolist()
+            action = action_numpy
             return action
 
-def hidden_init(layer):
-    fan_in = layer.weight.data.size()[0]
-    lim = 1. / np.sqrt(fan_in)
-    return (-lim, lim)
-
-class CriticNetwork(BaseNetwork):
+class SoftQNetwork(nn.Module):
     """Critic (Value) Model."""
 
-    def __init__(self, num_observation, num_action, hidden_layers:Optional[List[int]]=[32,64], activation:Optional[str] = "ReLU", seed:int=1):
+    def __init__(self, num_observation, num_action, hidden_layers: Optional[Sequence[int]] = (32, 64),
+                 activation: Optional[str] = "ReLU", seed: int = 1):
         """Initialize parameters and build model.
         Params
         ======
@@ -115,7 +106,7 @@ class CriticNetwork(BaseNetwork):
             seed (int): Random seed
             hidden_size (int): Number of nodes in the network layers
         """
-        super(CriticNetwork, self).__init__()
+        super(SoftQNetwork, self).__init__()
         self.seed = torch.manual_seed(seed)
 
         in_dim = num_observation
@@ -135,13 +126,8 @@ class CriticNetwork(BaseNetwork):
                 layer.weight.data.uniform_(*hidden_init(layer))
         self.last_layer.weight.data.uniform_(-3e-3, 3e-3)
 
-
-
     def forward(self, state):
         x = state
         for layer in self.layers:
             x = layer(x)
         return self.last_layer(x)
-    
-
-

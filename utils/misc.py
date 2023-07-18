@@ -1,3 +1,4 @@
+from collections import namedtuple
 from typing import Any, Dict
 from pathlib import Path
 import os
@@ -66,3 +67,6 @@ def convert_dict_to_numpy(dictionary: Dict[str, Any]) -> np.ndarray:
     """
 
     return np.array(list(dictionary.values()))
+
+
+Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])

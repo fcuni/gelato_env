@@ -29,6 +29,7 @@ class GelateriaState:
     current_markdowns: Optional[Dict[str, float]] = None
     last_markdowns: Optional[Dict[str, float]] = None
     last_actions: Optional[Dict[str, List[float]]] = None
+    historical_action_count: Optional[Dict[str, Dict[float, int]]] = None
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
@@ -118,4 +119,5 @@ def init_state_from(products: List[Gelato]) -> GelateriaState:
         last_markdowns={product.id: None for product in products},
         last_actions={product.id: [] for product in products},
         local_reward={product.id: None for product in products},
+        historical_action_count={product.id: {} for product in products}
     )

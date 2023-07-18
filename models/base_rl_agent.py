@@ -1,11 +1,11 @@
 from abc import abstractmethod
 
 from env.gelateria_env import GelateriaEnv
-from utils.config import OptimiserConfig
+from utils.config import BaseConfig
 
 
 class RLAgent:
-    def __init__(self, env: GelateriaEnv, config: OptimiserConfig, name: str):
+    def __init__(self, env: GelateriaEnv, config: BaseConfig, name: str):
         self._env = env
         self._config = config
         self._name = name

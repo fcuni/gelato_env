@@ -105,20 +105,27 @@ class OptimiserConfig(BaseConfig):
 
 @dataclass
 class SACConfig(BaseConfig):
+    seed: int = 42
+    torch_deterministic: bool = True
     n_episodes: int = 1000
     gamma: float = 0.99
-    tau: float = 1e-2 #1.0  # oldsac 1e-2
+    tau: float = 1e-2  #1.0
     learning_rate: float = 5e-4
+    auto_entropy_tuning: bool = True
+    alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
     buffer_size: int = 500000
     batch_size: int = 200
-    initial_random_steps: int = 100000
-    target_network_frequency: int = 8000
-    auto_entropy_tuning: bool = True
-    save_buffer: bool = True
+    initial_random_steps: int = 20000   #100000
+    target_network_frequency: int = 600  # 8000  # how often to update the target network (in steps)
+    replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer.pkl"  # if path is provided, no new experience buffer is generated
+    save_replay_buffer: bool = True
     target_entropy_scale: float = 0.89
     markdown_penalty: float = 1.0
     waste_penalty: float = 0.0
     mask_fn: Callable = BooleanMonotonicMarkdownsMask
+    max_markdown_changes: int = 3
+    regenerate_buffer: bool = False
+    update_frequency: int = 4  # how often to update the actor & critic network (in steps)
 
 
 @dataclass

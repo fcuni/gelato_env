@@ -137,7 +137,7 @@ class GelateriaEnv(gym.Env):
         """
         self._state = state
 
-    def mask_actions(self, state: Optional[GelateriaState] = None) -> np.ndarray:
+    def mask_actions(self, state: Union[GelateriaState, torch.Tensor] = None) -> np.ndarray:
         """Allow only increasing markdowns."""
         if state is None:
             state = self._state

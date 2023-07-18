@@ -74,9 +74,12 @@ class SalesUpliftReward(BaseReward):
             for product_id, alt_sales in zip(state.products, could_have_been_sales_predictions)}
 
         # compute the sales difference between the actual sales and the could-have-been sales
-        sales_diff = {
-            product_id: sales[product_id] - could_have_been_sales[product_id]
-            if state.current_markdowns[product_id] != state.last_markdowns[product_id] else 0.0
+        revenue = get_sales_revenue(sales, state)
+        could_have_been_revenue = get_sales_revenue(could_have_been_sales, previous_state)
+        revenue_diff = {
+            product_id: revenue[product_id] * sales[product_id] - could_have_been_revenue[product_id] *
+                        could_have_been_sales[product_id] if state.current_markdowns[product_id] !=
+                                                             state.last_markdowns[product_id] else 0.0
             for product_id in state.products}
 
         # check if the markdowns have changed, assign markdown penalty if so
@@ -85,7 +88,7 @@ class SalesUpliftReward(BaseReward):
                 product_id] else 0.0 for product_id in state.products}
 
         # compute the reward by adding the sales difference and the markdown penalty
-        reward = {product_id: sales_diff[product_id] + price_change_penalty[product_id] for product_id in
+        reward = {product_id: revenue_diff[product_id] + price_change_penalty[product_id] for product_id in
                   state.products}
 
         return reward
