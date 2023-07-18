@@ -57,3 +57,22 @@ class NoRestrictionBooleanMask(ActionMask):
             mask = np.ones((state.shape[0], 101))
 
         return mask.squeeze().astype(bool)
+
+
+class OnlyCurrentActionBooleanMask(ActionMask):
+
+    def __init__(self):
+        super().__init__(name="OnlyCurrentActionBooleanMask")
+
+    def __call__(self, state: Union[GelateriaState, torch.Tensor]) -> np.ndarray:
+        if isinstance(state, GelateriaState):
+            mask = np.zeros((len(state.products), 101))
+            for idx, markdown in enumerate(state.current_markdowns.values()):
+                mask[idx, int(markdown * 100)] = 1
+        else:
+            mask = np.zeros((state.shape[0], 101))
+            for idx, markdown in enumerate(state[:, 3]):
+                mask[idx, int(markdown * 100)] = 1
+
+        return mask.squeeze().astype(bool)
+
