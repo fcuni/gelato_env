@@ -1,4 +1,5 @@
 import logging
+import os
 import pickle
 from copy import deepcopy
 from dataclasses import dataclass
@@ -113,6 +114,7 @@ class MCControl(RLAgent):
 
         self._rewards = []
         self._discounted_rewards = []
+        self._path_to_model = config.path_to_model
 
     @property
     def policy(self):
@@ -158,7 +160,11 @@ class MCControl(RLAgent):
         Returns:
             The greedy actions to take.
         """
-        actions = (np.argmax(self._Q + mask, axis=-1) / 100)[:, current_stock]
+        if len(mask.shape) < len(self._Q.shape):
+            actions = np.take_along_axis(np.argmax(self._Q + mask.reshape(*(mask.shape), 1), axis=-1) / 100,
+                                         (np.array(current_stock)[:, None]), axis=1).squeeze(-1)
+        else:
+            actions = (np.argmax(self._Q + mask, axis=-1) / 100)[:, current_stock]
         return actions
 
     def _select_random_action(self, mask: np.array):
@@ -225,7 +231,9 @@ class MCControl(RLAgent):
 
     def save(self):
         """Saves the model to disk."""
-        with open(self._path_to_model, "wb") as f:
+        os.makedirs(self._path_to_model, exist_ok=True)
+        path = self._path_to_model / f"{self.name}.pkl"
+        with open(path, "wb") as f:
             pickle.dump(self, f)
 
     def load(self):

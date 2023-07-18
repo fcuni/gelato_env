@@ -4,7 +4,7 @@ from typing import Optional, List, Union
 
 import pandas as pd
 from env.gelateria_env import GelateriaEnv
-from models.td_0 import StateQuad
+from models.td_zero import StateQuad
 
 
 class ReplayBuffer:

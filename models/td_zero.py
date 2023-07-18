@@ -155,10 +155,10 @@ class TDZero(RLAgent):
         wandb_config = {
             "algorithm": "TD_Zero",
             "episodes": episodes,
-            "environment": "gelateria"
+            "environment": self._env.name
 
         }
-        with wandb.init(project="msc_project", entity="timc", config=wandb_config, mode="offline"):
+        with wandb.init(project="msc_project", entity="timc", config=wandb_config, mode="online"):
 
             self._env.reset()
             if self._warm_start is not None:

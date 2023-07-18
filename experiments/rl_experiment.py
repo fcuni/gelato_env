@@ -1,7 +1,6 @@
 from data_generators.data_generators import DataGenerator
 from env.gelateria_env import GelateriaEnv
 from env.reward.simple_reward import SimpleReward
-from models.mc_control import MCControl
 from models.mlp_sales import MLPLogSalesModel
 from models.td_zero import TDZero
 from utils.config import ExperimentConfig
@@ -31,8 +30,7 @@ class RLExperiment:
         return model
 
     def get_rl_model(self):
-        # rl_model = TDZero(env=self.build_env(), name="td_zero", config=self._config.optimiser_config)
-        rl_model = MCControl(env=self.build_env(), name="mc_control", config=self._config.optimiser_config)
+        rl_model = TDZero(env=self.build_env(), name="td_zero", config=self._config.optimiser_config)
         return rl_model
 
     def build_env(self):
