@@ -33,8 +33,8 @@ def collect_random(env, dataset, num_samples=200, state_transform_fn: Optional[C
             idx += 1
         action = [env.action_space.sample() for _ in range(env.state.n_products)]
         next_state, reward, done, _ = env.step(action)
-        dataset.add(state_transform_fn(state), action, list(reward.values()), state_transform_fn(next_state),
-                    env.state.per_product_done_signal)
+        dataset.add(state=state_transform_fn(state), action=action, reward=list(reward.values()),
+                    next_state=state_transform_fn(next_state), terminated=env.state.per_product_done_signal)
         state = next_state
         if done:
             idx = 0
@@ -51,8 +51,8 @@ def collect_random_v2(env, dataset, num_samples=200, state_transform_fn: Optiona
         action_mask = env.mask_actions().astype(np.int8)
         action = np.array([env.action_space.sample(mask=action_mask[i]) for i in range(env.state.n_products)])
         next_state, reward, _, _ = env.step(action, action_dtype="int")
-        dataset.add(state_transform_fn(state), action, convert_dict_to_numpy(reward), state_transform_fn(next_state),
-                    env.state.per_product_done_signal)
+        dataset.add(state=state_transform_fn(state), action=action, reward=convert_dict_to_numpy(reward),
+                    next_state=state_transform_fn(next_state), terminated=env.state.per_product_done_signal)
         sample_state, _ = env.sample_from_current_store()
         env.reset()
         env.set_state(sample_state)

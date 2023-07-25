@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from utils.config import ExperimentConfig
+from utils.config import ExperimentConfig, TDZeroExperimentConfig, SupervisedExperimentConfig
 from data_generators.data_generators import DataGenerator
 from models.mlp_sales import MLPLogSalesModel
 
@@ -11,9 +11,9 @@ def get_model(input_dim, config):
 
 
 def get_experiment_config():
-    config = ExperimentConfig()
+    config = SupervisedExperimentConfig()
     config.lightning_config.callbacks = [ModelCheckpoint(monitor="mean_loss_train", mode="min", save_top_k=5)]
-    config.lightning_config.max_epochs = 100
+    config.lightning_config.max_epochs = 1000
     return config
 
 

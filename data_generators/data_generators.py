@@ -73,7 +73,7 @@ class DataGenerator:
             df["_expected_sales"] = expected_sales
             probs_sales = self.config.uplift_generator.prob_sales_at_reduction(reds).numpy()
             df["_prob_sales"] = probs_sales
-            df["sales"] = expected_sales * probs_sales
+            df["sales"] = expected_sales * probs_sales /10
             dfs += [df]
         dfs = pd.concat(dfs)
         dfs.sort_values([], axis="columns", inplace=True)

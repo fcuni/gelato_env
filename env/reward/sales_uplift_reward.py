@@ -53,9 +53,14 @@ class SalesUpliftReward(BaseReward):
         self._sales_model = sales_model
 
     @property
-    def markdown_penalty(self) -> float:
-        """Return the markdown penalty."""
-        return self._markdown_penalty
+    def configs(self):
+        """
+        Returns the reward configuration.
+
+        Returns:
+            Dict[str, Any]: reward configuration
+        """
+        return {"rewards/markdown_penalty": self._markdown_penalty, "rewards/waste_penalty": self._waste_penalty}
 
     def __call__(self, sales: Dict[str, float], state: GelateriaState,
                  previous_state: Optional[GelateriaState] = None) -> Dict[str, float]:
@@ -78,14 +83,17 @@ class SalesUpliftReward(BaseReward):
         could_have_been_revenue = get_sales_revenue(could_have_been_sales, previous_state)
         revenue_diff = {
             product_id: revenue[product_id] * sales[product_id] - could_have_been_revenue[product_id] *
-                        could_have_been_sales[product_id] if state.current_markdowns[product_id] !=
-                                                             state.last_markdowns[product_id] else 0.0
+                        could_have_been_sales[product_id]
+            if (state.last_markdowns[product_id] is not None) and (
+                        state.current_markdowns[product_id] != state.last_markdowns[product_id]) else 0.0
             for product_id in state.products}
 
         # check if the markdowns have changed, assign markdown penalty if so
         price_change_penalty = {
-            product_id: (-1.0 * self._markdown_penalty) if state.current_markdowns[product_id] != state.last_markdowns[
-                product_id] else 0.0 for product_id in state.products}
+            product_id: (-1.0 * self._markdown_penalty)
+            if (state.last_markdowns[product_id] is not None) and (
+                        state.current_markdowns[product_id] != state.last_markdowns[product_id]) else 0.0
+            for product_id in state.products}
 
         # compute the reward by adding the sales difference and the markdown penalty
         reward = {product_id: revenue_diff[product_id] + price_change_penalty[product_id] for product_id in

@@ -1,10 +1,12 @@
-from collections import namedtuple
 from typing import Any, Dict
 from pathlib import Path
 import os
 from typing import Optional
 import numpy as np
 import torch
+from torch.utils.data import random_split, DataLoader, TensorDataset
+
+import utils.types
 
 
 def get_root_dir() -> Path:
@@ -69,4 +71,56 @@ def convert_dict_to_numpy(dictionary: Dict[str, Any]) -> np.ndarray:
     return np.array(list(dictionary.values()))
 
 
-Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+def to_tensor(x: utils.types.TensorType, device: Optional[torch.device] = None) -> torch.Tensor:
+    """
+    Helper function to convert a numpy array or torch.Tensor to a torch.Tensor.
+
+    Args:
+        x: input to convert.
+        device: device to have the output tensor assigned to. Defaults to None.
+
+    Returns:
+        torch.Tensor of the input.
+    """
+    if isinstance(x, torch.Tensor):
+        return x if device is None else x.to(device)
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x) if device is None else torch.from_numpy(x).to(device)
+    raise ValueError("Input must be torch.Tensor or np.ndarray.")
+
+
+def split_dataset_to_train_valid_loaders(dataset: TensorDataset, train_fraction: float = 0.8, batch_size: int = 128,
+                                         shuffle: bool = True, seed: Optional[int] = None):
+    """
+    Split a TensorDataset into train_loader and valid_loader.
+
+    Args:
+        dataset (TensorDataset): The TensorDataset to be split.
+        train_fraction (float, optional): Fraction of data to be used for training. Default is 0.8.
+        batch_size (int, optional): Batch size for DataLoader. Default is 128.
+        shuffle (bool, optional): Whether to shuffle the data. Default is True.
+        seed (int, optional): Random seed for reproducibility. Default is None.
+
+    Returns:
+        train_loader (DataLoader): DataLoader for the training set.
+        valid_loader (DataLoader): DataLoader for the validation set.
+    """
+    # Calculate the sizes of training and validation sets
+    num_samples = len(dataset)
+    num_train_samples = int(train_fraction * num_samples)
+    num_valid_samples = num_samples - num_train_samples
+
+    # Set random seed for reproducibility if provided
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    # Split the dataset into training and validation sets
+    train_dataset, valid_dataset = random_split(dataset, [num_train_samples, num_valid_samples])
+
+    # Create DataLoader for training set
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
+
+    # Create DataLoader for validation set
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=shuffle)
+
+    return train_loader, valid_loader

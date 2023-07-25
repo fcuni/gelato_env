@@ -10,6 +10,8 @@ from ray.rllib.utils import override
 import torch
 
 from env.gelateria import Gelato, GelateriaState
+from env.markdown_trigger.base_trigger import BaseTrigger
+from env.markdown_trigger.triggers import DefaultTrigger
 from env.reward.base_reward import BaseReward
 from env.mask.action_mask import ActionMask
 from env.mask.simple_masks import MonotonicMarkdownsMask
@@ -60,7 +62,7 @@ class GelateriaEnv(gym.Env):
                  mask_fn: Callable[[], ActionMask] = MonotonicMarkdownsMask,
                  restock_fct: Optional[Callable[[Gelato], int]] = None,
                  max_stock: int = 100,
-                 max_steps: int = int(1e8),
+                 max_steps: int = 1000  #int(1e8)
                  ):
         """
         Initialize the Gelateria environment.
@@ -73,6 +75,7 @@ class GelateriaEnv(gym.Env):
             max_stock: Maximum stock level for each product.
             max_steps: Maximum number of steps before the environment is reset.
         """
+
         self._name = "GelateriaEnv"
         self._sales_model = sales_model
         self._reward = reward
@@ -97,7 +100,6 @@ class GelateriaEnv(gym.Env):
         }
         self.observation_space = gym.spaces.Dict(observation_spaces)
         self.action_space = Discrete(101)  # define the action space as discrete
-
         self.reset()
 
     @property
@@ -188,12 +190,13 @@ class GelateriaEnv(gym.Env):
 
             # TODO: remove the markdown action count restriction (only for testing)
             # if state.historical_actions_count(product_id)[product_id] <= 3:
-            state.last_markdowns[product_id] = state.current_markdowns[product_id]
-            state.current_markdowns[product_id] = markdown
+            if state.current_markdowns is not None:
+                if not state.current_markdowns == markdown:
+                    state.last_markdowns[product_id] = state.current_markdowns[product_id]
+                    state.current_markdowns[product_id] = markdown
 
             # Add current markdown to last actions
-            if len(state.last_actions[product_id]) == 0:
-                state.last_actions[product_id].append(markdown)
+            state.last_actions[product_id].append(markdown)
 
     def _update_terminal_reward(self, state: GelateriaState, terminal_reward: Dict[str, float]):
         """Update the reward of the terminal state.

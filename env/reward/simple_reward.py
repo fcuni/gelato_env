@@ -24,6 +24,16 @@ class SimpleReward(BaseReward):
         super().__init__(name="SimpleReward")
         self._waste_penalty = waste_penalty
 
+    @property
+    def configs(self):
+        """
+        Returns the reward configuration.
+
+        Returns:
+            Dict[str, Any]: reward configuration
+        """
+        return {"rewards/waste_penalty": self._waste_penalty}
+
     def __call__(self, sales: Dict[str, float], state: GelateriaState,
                  previous_state: Optional[GelateriaState] = None) -> Dict[str, float]:
 

@@ -27,7 +27,7 @@ class BaseNetwork(nn.Module):
 
 
 class ActorNetwork(BaseNetwork):
-    def __init__(self, num_observation: int, num_action: int, hidden_layers: Optional[Sequence[int]] = (32, 64),
+    def __init__(self, num_observation: int, num_action: int, hidden_layers: Optional[Sequence[int]] = (128, 128),
                  activation: Optional[str] = "ReLU"):
         """Initialize parameters and build actor network.
 
@@ -56,7 +56,7 @@ class ActorNetwork(BaseNetwork):
         action_probs = self._model(state)
         return action_probs
 
-    def evaluate(self, state_obs, epsilon=1e-6, mask: Optional[np.ndarray] = None) \
+    def evaluate(self, state_obs, epsilon: float = 1e-6, mask: Optional[np.ndarray] = None) \
             -> Tuple[Sequence[float], torch.Tensor, torch.Tensor]:
 
         action_probs = self.forward(state_obs)
@@ -68,7 +68,7 @@ class ActorNetwork(BaseNetwork):
         with torch.no_grad():
             action_numpy = np.array([None] * len(action_probs))
             action_numpy[mask_tensor.any(dim=-1).numpy()] = (dist.sample().detach().cpu().int()).numpy()
-            action = action_numpy  # .tolist()
+            action = action_numpy
 
         # deal with cases where probabilities are 0 before taking the log
         z = action_probs == 0.0
@@ -83,20 +83,15 @@ class ActorNetwork(BaseNetwork):
                 mask = np.ones(action_probs.shape, dtype=bool)
             mask_tensor = torch.tensor(mask, dtype=torch.bool)
 
-            # filter out the products that have no available actions
-            filtered_action_probs = action_probs[mask_tensor.any(dim=-1)]
-            filtered_mask_tensor = mask_tensor[mask_tensor.any(dim=-1)]
-
-            dist = CategoricalMasked(probs=filtered_action_probs, mask=filtered_mask_tensor)
-            action_numpy = np.array([None] * len(action_probs))
-            action_numpy[mask_tensor.any(dim=-1)] = (dist.sample().detach().cpu().int()).numpy()
-            action = action_numpy
-            return action
+            dist = CategoricalMasked(probs=action_probs, mask=mask_tensor)
+            with torch.no_grad():
+                det_action = torch.argmax(dist.probs, dim=1).detach().cpu().int().numpy()
+            return det_action
 
 class SoftQNetwork(nn.Module):
     """Critic (Value) Model."""
 
-    def __init__(self, num_observation, num_action, hidden_layers: Optional[Sequence[int]] = (32, 64),
+    def __init__(self, num_observation, num_action, hidden_layers: Optional[Sequence[int]] = (128, 128),
                  activation: Optional[str] = "ReLU", seed: int = 1):
         """Initialize parameters and build model.
         Params

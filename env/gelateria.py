@@ -29,13 +29,15 @@ class GelateriaState:
     current_markdowns: Optional[Dict[str, float]] = None
     last_markdowns: Optional[Dict[str, float]] = None
     last_actions: Optional[Dict[str, List[float]]] = None
+
+
     historical_action_count: Optional[Dict[str, Dict[float, int]]] = None
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
     is_terminal: bool = False
     # TODO: set the restock period back to 7 days
-    restock_period: int = 7  # original: 7
+    restock_period: int = 1  # original: 7
 
     # TODO:to remove after testing
     sales_days: int = 365
@@ -95,6 +97,17 @@ class GelateriaState:
                                                                                n_flavours),
                                                    ]).float())
         return torch.vstack(public_obs_tensor)
+
+    def get_product_labels(self):
+        """
+        Construct and return the product labels from the state.
+
+        Returns:
+            list of product labels. (format: `{product name}_{product id}`).
+            For example, `Gelato(VANILLA)_59a9d160-fc7c-4905-a7bd-5bd5a6ee293c`.
+        """
+
+        return [f"{str(self.products[product_id])}_{product_id}" for product_id in self.products.keys()]
 
 
 def default_init_state() -> GelateriaState:

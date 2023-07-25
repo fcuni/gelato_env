@@ -26,6 +26,17 @@ class SimpleRewardEarlyTerminationPenalty(BaseReward):
         self._waste_penalty = waste_penalty
         self._early_term_penalty = early_term_penalty
 
+    @property
+    def configs(self):
+        """
+        Returns the reward configuration.
+
+        Returns:
+            Dict[str, Any]: reward configuration
+        """
+        return {"rewards/waste_penalty": self._waste_penalty,
+                "rewards/early_term_penalty": self._early_term_penalty}
+
     def __call__(self, sales: Dict[str, float], state: GelateriaState,
                  previous_state: Optional[GelateriaState] = None) -> Dict[str, float]:
         remaining_stock = {product_id: product.stock for product_id, product in state.products.items()}

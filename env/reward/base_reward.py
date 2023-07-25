@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from env.gelateria import GelateriaState
 
@@ -12,6 +12,10 @@ class BaseReward:
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def configs(self) -> Dict[str, Any]:
+        raise NotImplementedError
 
     @abstractmethod
     def __call__(self, sales: Dict[str, float], state: GelateriaState,
