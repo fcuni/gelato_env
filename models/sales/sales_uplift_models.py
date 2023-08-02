@@ -26,6 +26,10 @@ class SalesUpliftModel:
     def __call__(self, markdown: float):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def get_uplift(self, markdown: float) -> float:
+        raise NotImplementedError
+
 
 class GammaSalesUpliftModel(SalesUpliftModel):
     def __init__(self, rate: float = 1.2):

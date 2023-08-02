@@ -1,4 +1,5 @@
-from typing import Sequence, List
+import abc
+from typing import Sequence, List, Union, Dict, Any, Tuple
 
 import torch
 
@@ -11,18 +12,78 @@ class SalesPredictionModel:
         self._base_sales_model = base_sales_model
         self._uplift_model = uplift_model
 
+    @property
+    def base_sales_model_info(self):
+        return self._base_sales_model.info
+
+    def _transform_inputs_from_gym(self, inputs: Sequence[Sequence[float]]) -> torch.Tensor:
+        raise NotImplementedError
+
     def _get_base_sales(self, inputs: torch.Tensor):
         return self._base_sales_model.get_sales(inputs)
 
     def _get_uplift(self, markdown: Sequence[float]):
         return self._uplift_model(markdown)
 
-    def get_sales(self, inputs, markdowns: Sequence[float]) -> List[float]:
-        assert len(inputs) == len(markdowns)
-        sales = []
-        for input_data, markdown in zip(inputs, markdowns):
-            stock = input_data[1] # TODO: to identify stock column
-            base_sales = self._get_base_sales(input_data)
-            sales_uplift = self.get_uplift(markdown)
-            sales.append(min(stock, base_sales * sales_uplift))
-        return sales
+    @abc.abstractmethod
+    def get_sales(self, inputs: torch.Tensor, output_info: bool = False) -> \
+            Union[List[float], Tuple[List[float], Dict[str, Any]]]:
+        raise NotImplementedError
+
+
+class AllFlavourSalesPredictionModel(SalesPredictionModel):
+    def __init__(self, base_sales_model: BaseSalesModel, uplift_model: SalesUpliftModel):
+        super().__init__(base_sales_model, uplift_model)
+
+    @property
+    def base_sales_model_info(self):
+        return self._base_sales_model.info
+
+    def get_sales(self, inputs: torch.Tensor, output_info: bool = False) -> \
+            Union[List[float], Tuple[List[float], Dict[str, Any]]]:
+
+        markdowns = inputs[:, 0].detach().cpu().numpy().flatten()
+        stocks = inputs[:, 2].detach().cpu().numpy().flatten()
+        base_sales = self._get_base_sales(inputs[:, 1:]).detach().cpu().numpy().flatten()
+        sales_uplifts = self._get_uplift(markdowns)
+        sales, info = [], {"base_sales": [], "sales_uplift": [], "unclipped_sales": []}
+        for base_sale, sales_uplift, markdown in zip(base_sales, sales_uplifts, markdowns):
+            sales.append(min(stocks, base_sales * sales_uplift))
+            # log info
+            info["base_sales"].append(base_sale)
+            info["sales_uplift"].append(sales_uplift)
+            info["unclipped_sales"].append(base_sale * sales_uplift)
+
+        if output_info:
+            return sales, info
+        else:
+            return sales
+
+
+class SeparateFlavourSalesPredictionModel(SalesPredictionModel):
+    def __init__(self, base_sales_model: BaseSalesModel, uplift_model: SalesUpliftModel):
+        super().__init__(base_sales_model, uplift_model)
+
+    @property
+    def base_sales_model_info(self):
+        return self._base_sales_model.info
+
+    def get_sales(self, inputs: torch.Tensor, output_info: bool = False) -> \
+            Union[List[float], Tuple[List[float], Dict[str, Any]]]:
+
+        markdowns = inputs[:, 0].detach().cpu().numpy().flatten()
+        stocks = inputs[:, 2].detach().cpu().numpy().flatten()
+        base_sales = self._get_base_sales(inputs[:, 1:]).detach().cpu().numpy().flatten()
+        sales_uplifts = self._get_uplift(markdowns)
+        sales, info = [], {"base_sales": [], "sales_uplift": [], "unclipped_sales": []}
+        for base_sale, sales_uplift, markdown in zip(base_sales, sales_uplifts, markdowns):
+            sales.append(min(stocks, base_sales * sales_uplift))
+            # log info
+            info["base_sales"].append(base_sale)
+            info["sales_uplift"].append(sales_uplift)
+            info["unclipped_sales"].append(base_sale * sales_uplift)
+
+        if output_info:
+            return sales, info
+        else:
+            return sales

@@ -67,15 +67,17 @@ def generate_eval_plot(model: BaseSalesModel, df: pd.DataFrame, batch_size: int 
 
     model.eval()
     preds = []
-    for inputs, targets in eval_dataloader:
+    for inputs, _ in eval_dataloader:
         with torch.no_grad():
             if device is not None:
                 inputs = inputs.to(device)
-            preds.append((model.get_sales(inputs).detach().cpu().numpy().squeeze()))
+            preds.append((np.atleast_1d(model.get_sales(inputs).detach().cpu().numpy().squeeze())))
     df["pred"] = np.concatenate(preds)
 
     # Create two subplots using make_subplots
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
+
+    # df["log_sales"] = np.log(df["sales"])
 
     sales_fig = px.scatter(df, x='calendar_date', y='sales', color="flavour")
     pred_fig = px.scatter(df, x='calendar_date', y='pred', color="flavour")
