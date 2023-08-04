@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Dict, Any
 
 import pandas as pd
@@ -159,54 +160,64 @@ if __name__ == "__main__":
 
     # Create Dataset objects for training and test datasets
     base_sales_train_df, base_sales_valid_df = split_train_and_test_df_by_flavour(base_sales_df, test_size=0.25)
-    train_dataset = BaseSalesDataset(base_sales_train_df, "sales", info={"sales_normalising_factor": base_sales_df["sales"].max()})
-    valid_dataset = BaseSalesDataset(base_sales_valid_df, "sales", info=train_dataset.info)
-    log_info = {"config": {"valid_split": 0.25},
-                                "name": f"BaseSalesExp03_With_Encoding_1",
-                                "notes": f"Base sales model for all flavours (without flavour encoding)",
-                                "tags": ["one_model_for_all_flavours"],
-                                "group": "BaseSalesExp03_With_Encoding",}
-
-    # Create Dataset object for evaluation dataset
-    eval_df = base_sales_df.copy()
-
-    # Define the model
-    base_sales_model = MLPLogBaseSalesModel(input_dim=len(train_dataset.columns), output_dim=1, info=train_dataset.info)
-
-    # Train the model
-    wandb_run = train(base_sales_model, train_dataset, valid_dataset, eval_df=eval_df, num_epochs=2000, batch_size=64,
-                      learning_rate=1e-5, logging_info=log_info)
-
-    # Save the model
-    base_sales_model.save("base_sales_model_with_all_product_encoding.pt")
-    artifact = wandb.Artifact('model', type='model')
-    artifact.add_file("base_sales_model_with_all_product_encoding.pt")
-    wandb_run.log_artifact(artifact)
-
-    wandb_run.finish()
-
-    # for flavour in base_sales_df["flavour"].unique():
+    # train_dataset = BaseSalesDataset(base_sales_train_df, "sales", info={"sales_normalising_factor": base_sales_df["sales"].max()})
+    # valid_dataset = BaseSalesDataset(base_sales_valid_df, "sales", info=train_dataset.info)
+    # log_info = {"config": {"valid_split": 0.25},
+    #                             "name": f"BaseSalesExp03_With_Encoding_1",
+    #                             "notes": f"Base sales model for all flavours (without flavour encoding)",
+    #                             "tags": ["one_model_for_all_flavours"],
+    #                             "group": "BaseSalesExp03_With_Encoding",}
     #
-    #     train_dataset = BaseSalesDataset(base_sales_train_df.loc[base_sales_train_df["flavour"] == flavour].copy(),
-    #                                      "sales", info={"sales_normalising_factor": base_sales_df["sales"].max()})
-    #     valid_dataset = BaseSalesDataset(base_sales_valid_df.loc[base_sales_valid_df["flavour"] == flavour].copy(),
-    #                                      "sales", info=train_dataset.info)
-    #     log_info = {"config": {"valid_split": 0.25},
-    #                 "name": f"BaseSalesExp01_{flavour}",
-    #                 "notes": f"Base sales model for flavour {flavour}",
-    #                 "tags": ["one_model_per_flavour", flavour],
-    #                 "group": "BaseSalesExp01_OneModelPerFlavour",}
+    # # Create Dataset object for evaluation dataset
+    # eval_df = base_sales_df.copy()
     #
-    #     # Create Dataset object for evaluation dataset
-    #     eval_df = base_sales_df.loc[base_sales_df["flavour"] == flavour].copy()
+    # # Define the model
+    # base_sales_model = MLPLogBaseSalesModel(input_dim=len(train_dataset.columns), output_dim=1, info=train_dataset.info)
     #
-    #     # Define the model
-    #     base_sales_model = MLPLogBaseSalesModel(input_dim=len(train_dataset.columns), output_dim=1,
-    #                                             info=train_dataset.info, additional_name=flavour)
+    # # Train the model
+    # wandb_run = train(base_sales_model, train_dataset, valid_dataset, eval_df=eval_df, num_epochs=2000, batch_size=64,
+    #                   learning_rate=1e-5, logging_info=log_info)
     #
-    #     # Train the model
-    #     train(base_sales_model, train_dataset, valid_dataset, eval_df=eval_df, num_epochs=3000, batch_size=64,
-    #           learning_rate=1e-5, logging_info=log_info)
+    # # Save the model
+    # model_saved_path = base_sales_model.save(f"MLPLogBaseSalesModel_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+    # artifact = wandb.Artifact('base_sales_model_all_flavour', type='model')
+    # artifact.add_file(model_saved_path)
+    # wandb_run.log_artifact(artifact)
     #
-    #     # Save the model
-    #     base_sales_model.save("experiment_data/trained_models/base_sales_models")
+    # wandb_run.finish()
+
+    for flavour in base_sales_df["flavour"].unique():
+
+        train_dataset = BaseSalesDataset(base_sales_train_df.loc[base_sales_train_df["flavour"] == flavour].copy(),
+                                         "sales", info={"sales_normalising_factor": base_sales_df["sales"].max()})
+        valid_dataset = BaseSalesDataset(base_sales_valid_df.loc[base_sales_valid_df["flavour"] == flavour].copy(),
+                                         "sales", info=train_dataset.info)
+        log_info = {"config": {"valid_split": 0.25},
+                    "name": f"BaseSalesExp04_{flavour}",
+                    "notes": f"Base sales model for flavour {flavour}",
+                    "tags": ["one_model_per_flavour", flavour],
+                    "group": "BaseSalesExp04_OneModelPerFlavour",}
+
+        # Create Dataset object for evaluation dataset
+        eval_df = base_sales_df.loc[base_sales_df["flavour"] == flavour].copy()
+
+        # Define the model
+        base_sales_model = MLPLogBaseSalesModel(input_dim=len(train_dataset.columns), output_dim=1,
+                                                info=train_dataset.info, additional_name=flavour,
+                                                hidden_layers=(64, 256, 64))
+
+        # Train the model
+        wandb_run = train(base_sales_model, train_dataset, valid_dataset, eval_df=eval_df, num_epochs=3000,
+                          batch_size=64, learning_rate=1e-5, logging_info=log_info)
+
+        # Save the model
+        model_saved_path = base_sales_model.save(
+            f"experiment_data/trained_models/base_sales_models/MLPLogBaseSalesModel_{flavour.replace(' ', '_')}.pt")
+        artifact = wandb.Artifact(f"base_sales_{flavour.replace(' ', '_')}", type="model")
+        artifact.add_file(model_saved_path)
+        wandb_run.log_artifact(artifact)
+
+        wandb_run.finish()
+
+
+

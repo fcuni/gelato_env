@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, Optional, Union, Callable, List
 
 import numpy as np
@@ -13,6 +14,7 @@ class Gelato:
     flavour: Flavour
     base_price: float
     stock: int
+    restock_possible: bool = True
     id: uuid.UUID = uuid.uuid4()
 
     def current_price(self, markdown: float) -> float:
@@ -26,10 +28,11 @@ class Gelato:
 class GelateriaState:
     products: Dict[str, Gelato]
     day_number: int = 0
+    current_date: Optional[datetime] = None
     current_markdowns: Optional[Dict[str, float]] = None
     last_markdowns: Optional[Dict[str, float]] = None
     last_actions: Optional[Dict[str, List[float]]] = None
-
+    historical_sales: Optional[Dict[str, List[float]]] = None
 
     historical_action_count: Optional[Dict[str, Dict[float, int]]] = None
     local_reward: Optional[Dict[str, float]] = None
@@ -37,10 +40,8 @@ class GelateriaState:
     step: int = 0
     is_terminal: bool = False
     # TODO: set the restock period back to 7 days
-    restock_period: int = 1  # original: 7
+    restock_period: int = 366  # original: 7
 
-    # TODO:to remove after testing
-    sales_days: int = 365
 
     @property
     def n_products(self):
@@ -77,11 +78,13 @@ class GelateriaState:
         self.max_stock = max([product.stock for product in self.products.values()])
 
     def restock(self, restock_fct: Union[Callable[[Gelato], int], Dict[str, int]]):
-        for product_id, stock in restock_fct.items():
-            if isinstance(restock_fct, dict):
-                self.products[product_id].stock = stock
-            else:
-                self.products[product_id].stock = restock_fct(self.products[product_id])
+        for product_id, product in self.products.items():
+            # only restock if the product can be restocked
+            if product.restock_possible:
+                if isinstance(restock_fct, dict):
+                    self.products[product_id].stock = restock_fct[product_id]
+                else:
+                    self.products[product_id].stock = restock_fct(product)
 
     def get_public_observations(self) -> torch.Tensor:
         flavour_one_hot = Flavour.get_flavour_encoding()
@@ -96,6 +99,14 @@ class GelateriaState:
                                                    torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
                                                                                n_flavours),
                                                    ]).float())
+            # TODO: currently the testing of the new public obs is moved to gelateria_env_v2
+            # public_obs_tensor.append(torch.hstack([torch.tensor(self.step,
+            #                                        torch.tensor(product.stock),
+            #                                        torch.tensor(product.base_price),
+            #                                        torch.tensor(self.current_markdowns[product_id]),
+            #                                        torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
+            #                                                                    n_flavours),
+            #                                        ]).float())
         return torch.vstack(public_obs_tensor)
 
     def get_product_labels(self):
@@ -122,6 +133,7 @@ def default_init_state() -> GelateriaState:
         last_markdowns={product.id: None for product in products},
         last_actions={product.id: [] for product in products},
         local_reward={product.id: None for product in products},
+        historical_sales={product.id: [] for product in products}
     )
 
 
@@ -132,5 +144,43 @@ def init_state_from(products: List[Gelato]) -> GelateriaState:
         last_markdowns={product.id: None for product in products},
         last_actions={product.id: [] for product in products},
         local_reward={product.id: None for product in products},
-        historical_action_count={product.id: {} for product in products}
+        historical_sales={product.id: [] for product in products},
+        # historical_action_count={product.id: {} for product in products}
+    )
+
+
+# TODO: to move this out after finish
+def default_init_state_new() -> GelateriaState:
+    import pandas as pd
+
+    # load the masked dataset
+    df = pd.read_csv("masked_dataset.csv")
+    # sort the dataset by date
+    df['calendar_date'] = pd.to_datetime(df['calendar_date'])
+    df.sort_values(by='calendar_date', inplace=True)
+    # query the last date in the dataset
+    last_date = df['calendar_date'].max()
+
+    products = []
+    current_markdowns = {}
+    # Loop through the rows in the filtered DataFrame
+    for index, row in df[df['calendar_date'] == last_date].iterrows():
+        # Access the values of each column for the current row
+        products_id = uuid.uuid4()
+        flavour = Flavour(row['flavour'])
+        base_price = float(row['full_price_masked'])
+        stock = int(row['stock'])
+        current_markdowns[products_id] = row['markdown']
+        restock_possible = False
+        products += [Gelato(flavour=flavour, base_price=base_price, stock=stock, id=products_id,
+                            restock_possible=restock_possible)]
+
+    return GelateriaState(
+        products={product.id: product for product in products},
+        current_markdowns=current_markdowns,
+        last_markdowns={product.id: None for product in products},
+        last_actions={product.id: [] for product in products},
+        local_reward={product.id: None for product in products},
+        historical_sales={product.id: [] for product in products},
+        current_date=last_date
     )

@@ -1,6 +1,6 @@
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, Literal
 import torch
 import numpy as np
 
@@ -9,6 +9,8 @@ TensorType = Union[torch.Tensor, np.ndarray]
 
 Transition = namedtuple("Transition",
                         field_names=["state", "action", "next_state", "reward", "terminated", "truncated"])
+
+Activations = Literal[tuple(Literal[act] for act in torch.nn.modules.activation.__all__)]
 
 
 @dataclass

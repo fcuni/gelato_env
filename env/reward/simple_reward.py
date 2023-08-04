@@ -7,7 +7,7 @@ from env.reward.base_reward import BaseReward
 def get_reduced_price(state: GelateriaState) -> Dict[str, float]:
     """Shorthand to compute the reduced price for the markdown products in the state."""
     return {
-        product_id: product.base_price * (1 - state.current_markdowns[product_id])
+        product_id: product.current_price(markdown=state.current_markdowns[product_id])
         for product_id, product in state.products.items()
     }
 
