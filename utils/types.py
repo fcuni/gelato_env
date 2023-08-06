@@ -5,6 +5,7 @@ import torch
 import numpy as np
 
 
+# EnvType = Union[GelateriaEnv, GelateriaEnv_v2, DefaultGelatoEnvWrapper]
 TensorType = Union[torch.Tensor, np.ndarray]
 
 Transition = namedtuple("Transition",

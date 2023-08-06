@@ -9,13 +9,19 @@ from models.sales.base_sales_models import BaseSalesModel
 
 class SalesPredictionModel:
     def __init__(self, base_sales_model: BaseSalesModel, uplift_model: SalesUpliftModel,
-                 base_sales_input_transform_fn: Optional[Callable] = None):
+                 base_sales_input_transform_fn: Optional[Callable] = None, name: Optional[str] = None):
         self._base_sales_model = base_sales_model
         self._uplift_model = uplift_model
         self._base_sales_input_transform_fn = base_sales_input_transform_fn
+        self._name = name if name is not None else \
+            f"SalesPredictionModel({self._base_sales_model.name}_{self._uplift_model.name})"
 
     @property
-    def base_sales_model_info(self):
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def base_sales_model_info(self) -> Dict[str, Any]:
         return self._base_sales_model.info
 
     def _transform_inputs_from_gym(self, inputs: Sequence[Sequence[float]]) -> torch.Tensor:
@@ -36,7 +42,8 @@ class SalesPredictionModel:
 class GenericSalesPredictionModel(SalesPredictionModel):
     def __init__(self, base_sales_model: BaseSalesModel, uplift_model: SalesUpliftModel,
                  base_sales_input_transform_fn: Optional[Callable] = None):
-        super().__init__(base_sales_model, uplift_model, base_sales_input_transform_fn)
+        super().__init__(base_sales_model, uplift_model, base_sales_input_transform_fn,
+                         name=f"GenericSalesPredictionModel(base={base_sales_model}, uplift={uplift_model})")
 
     @property
     def base_sales_model_info(self):
@@ -47,6 +54,8 @@ class GenericSalesPredictionModel(SalesPredictionModel):
 
         markdowns = inputs[:, 0].detach().cpu().numpy().flatten()
         base_sales = self._get_base_sales(inputs).detach().cpu().flatten()
+        # clip base sales to be non-negative
+        torch.clip_(base_sales, min=0.0, max=None)
         sales_uplifts = torch.tensor(self._get_uplift(markdowns))
         sales = (base_sales * sales_uplifts).tolist()
         # log info

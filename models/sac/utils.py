@@ -23,7 +23,7 @@ def collect_random(env, dataset, num_samples=200, state_transform_fn: Optional[C
     if state_transform_fn is None:
         state_transform_fn: Callable = lambda x: x
 
-    state, _, _, _ = env.reset()
+    state, *_, _, _ = env.reset()
     idx = 0
     for _ in range(num_samples):
         while idx < 100:
@@ -58,4 +58,22 @@ def collect_random_v2(env, dataset, num_samples=200, state_transform_fn: Optiona
         env.set_state(sample_state)
         state = env.get_observations(env.state)
     env.reset()
+
+
+def collect_random_v3(env, dataset, num_samples=200, state_transform_fn: Optional[Callable] = None):
+
+    state = env.reset()
+    dones = np.zeros(env.state.n_products, dtype=bool)
+    for _ in range(num_samples):
+        action_mask = env.mask_actions().astype(np.int8)
+        action = np.array([env.action_space.sample(mask=action_mask[i]) for i in range(env.state.n_products)])
+        next_state, reward, done, _ = env.step(action)
+
+        dataset.add(state=state[~dones], action=action[~dones], reward=reward[~dones],
+                    next_state=next_state[~dones], terminated=env.state.per_product_done_signal[~dones])
+        dones = env.state.per_product_done_signal
+        state = next_state
+        if done:
+            state = env.reset()
+            dones = np.zeros(env.state.n_products, dtype=bool)
 

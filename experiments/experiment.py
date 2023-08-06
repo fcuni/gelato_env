@@ -111,6 +111,31 @@ class BaseExperiment:
 
         return env
 
+    @staticmethod
+    def build_env_v2():
+        from models.sales.sales_prediction_models import GenericSalesPredictionModel
+        from models.sales.base_sales_models import CombinedMLPLogBaseSalesModel
+        from models.sales.sales_uplift_models import GammaSalesUpliftModel
+        from models.sales.dataset import transform_gym_inputs
+        from env.gelateria_env_v2 import GelateriaEnv_v2
+        from env.gelateria import default_init_state_new
+        from env.reward.simple_reward import SimpleReward
+        from env.mask.simple_masks import BooleanMonotonicMarkdownsMask
+        from env_wrapper.wrapper import DefaultGelatoEnvWrapper
+
+        sales_model = GenericSalesPredictionModel(
+            base_sales_model=CombinedMLPLogBaseSalesModel(
+                load_from_dir="experiment_data/trained_models/base_sales_models"),
+            uplift_model=GammaSalesUpliftModel(rate=1.2),
+            base_sales_input_transform_fn=transform_gym_inputs
+        )
+
+        env = GelateriaEnv_v2(init_state=default_init_state_new(), sales_model=sales_model, reward=SimpleReward(),
+                              mask_fn=BooleanMonotonicMarkdownsMask)
+
+        env_wrap = DefaultGelatoEnvWrapper(env)
+        return env_wrap
+
     @abstractmethod
     def get_rl_model(self) -> RLAgent:
         raise NotImplementedError

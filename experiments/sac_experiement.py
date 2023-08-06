@@ -15,19 +15,20 @@ def get_experiment_config():
 
 class SACExperiment(BaseExperiment):
     def __init__(self):
-        super().__init__(name="SACExperiment", config=get_experiment_config())
+        super().__init__(name="SACExperiment_NewEnv", config=get_experiment_config())
         self._config: SACExperimentConfig = get_experiment_config()
         #
         # supervised_model = self.get_supervised_model(MLPLogSalesModel)
 
-        self._env = self.build_env(
-            init_state=self._config.data_generation_config.init_state,
-            supervised_model=MLPLogSalesModel,
-            reward=SimpleReward(waste_penalty=0.0),
-            # reward=SalesUpliftReward(sales_model=self.get_supervised_model(MLPLogSalesModel), markdown_penalty=1.0),
-            action_mask_fn=BooleanMonotonicMarkdownsMask,
-            restock_fct=None
-        )
+        # self._env = self.build_env(
+        #     init_state=self._config.data_generation_config.init_state,
+        #     supervised_model=MLPLogSalesModel,
+        #     reward=SimpleReward(waste_penalty=0.0),
+        #     # reward=SalesUpliftReward(sales_model=self.get_supervised_model(MLPLogSalesModel), markdown_penalty=1.0),
+        #     action_mask_fn=BooleanMonotonicMarkdownsMask,
+        #     restock_fct=None
+        # )
+        self._env = self.build_env_v2()
 
     def get_rl_model(self) -> RLAgent:
         rl_model = SACDiscrete(env=self._env, config=self._config.sac_config)

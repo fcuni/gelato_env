@@ -24,23 +24,24 @@ import torch.optim as optim
 import torch.nn.functional as F
 from plotly.subplots import make_subplots
 
-from env.gelateria_env import GelateriaEnv
+EnvType = Union[gym.Env, gym.core.Env]
 from env.mask.simple_masks import OnlyCurrentActionBooleanMask
 from models.base_rl_agent import RLAgent
 from models.sac.networks import ActorNetwork, SoftQNetwork
 from utils.buffer import ReplayBuffer
-from models.sac.utils import collect_random_v2
+from models.sac.utils import collect_random_v2, collect_random_v3
 from utils.misc import get_flatten_observation_from_state, convert_dict_to_numpy
 from utils.config import SACConfig
 import plotly.express as px
 from wandb.wandb_run import Run
 
 from utils.types import TensorType
+from utils.logging import EpisodeLogger
 
 
 class SACDiscrete(RLAgent):
 
-    def __init__(self, env: GelateriaEnv,
+    def __init__(self, env: EnvType,
                  config: SACConfig,
                  name: str = "SAC_Discrete_v2",
                  device: Optional[torch.device] = None,
@@ -191,158 +192,150 @@ class SACDiscrete(RLAgent):
         """Train the agent."""
 
         # Load Replay Buffer from file / generate buffer
-        if not self._config.regenerate_buffer:
-            self.replay_buffer.load(self._config.replay_buffer_path)
-        if self._config.regenerate_buffer or len(self.replay_buffer) == 0:
-            collect_random_v2(self._env, self.replay_buffer, self._config.initial_random_steps,
-                              state_transform_fn=get_flatten_observation_from_state)
-            # save buffer to file after regenerating buffer
-            if self._config.save_replay_buffer:
-                self.replay_buffer.save(self._config.replay_buffer_path)
+        # TODO: temporarily disable
+        # if not self._config.regenerate_buffer:
+        #     self.replay_buffer.load(self._config.replay_buffer_path)
+        # if self._config.regenerate_buffer or len(self.replay_buffer) == 0:
+        #     # collect_random_v2(self._env, self.replay_buffer, self._config.initial_random_steps,
+        #     #                   state_transform_fn=get_flatten_observation_from_state)
+        #
+        #     collect_random_v3(self._env, self.replay_buffer, self._config.initial_random_steps)
+        #     # save buffer to file after regenerating buffer
+        #     if self._config.save_replay_buffer:
+        #         self.replay_buffer.save(self._config.replay_buffer_path)
 
         # Initialise variables
         global_step: int = 0
         episode_i: int = 0
         cumulative_reward: float = 0.0
         average_10_episode_reward: Deque = deque(maxlen=10)
-        episode_step_action_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-                                                                *(self._env.state.get_product_labels())])
-        episode_step_stock_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-                                                               *(self._env.state.get_product_labels())])
-        episode_step_sales_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-                                                               *(self._env.state.get_product_labels())])
-        episode_step_revenue_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-                                                                 *(self._env.state.get_product_labels())])
+        # episode_step_action_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
+        #                                                         *(self._env.state.get_product_labels())])
+        # episode_step_stock_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
+        #                                                        *(self._env.state.get_product_labels())])
+        # episode_step_sales_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
+        #                                                        *(self._env.state.get_product_labels())])
+        # episode_step_revenue_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
+        #                                                          *(self._env.state.get_product_labels())])
 
         # Loop over episodes
         while episode_i < self._config.n_episodes:
 
+
+
             print(f"Starting Episode {episode_i}...")
+
 
             # Initialise variables for episode
             episode_reward: float = 0.0
             episode_step: int = 0
             current_markdown_duration: int = 0
             self._markdown_trigger_fn.reset()
+            logger = EpisodeLogger()
 
             # Reset environment
-            obs, _, is_terminated, _ = self._env.reset()
+            obs, init_info = self._env.reset(get_info=True)
+            is_terminated = False
 
-            # Initialise trackers for single episode
-            single_episode_stock_per_product = {
-                product_id: [] for i, product_id in enumerate(self._env.state.products)
-            }
-            single_episode_sales_per_product = {
-                product_id: [] for i, product_id in enumerate(self._env.state.products)
-            }
-
-            single_episode_revenue_per_product = {
-                product_id: [] for i, product_id in enumerate(self._env.state.products)
-            }
+            logger.log_info(init_info)
 
             # Training Loop for single episode
             while not is_terminated:
 
-                # Warmup steps
-                if not self._markdown_trigger_fn(state=self._env.state):
-                    actions = np.array([0] * self._env.state.n_products).astype(int)
-
-                    pre_step_stocks = self._env.state.product_stocks
-
-                    next_obs, rewards, is_terminated, _ = self._env.step(actions, action_dtype="int")
-
-                    # Accumulate episode reward
-                    episode_reward += np.sum(convert_dict_to_numpy(rewards))
-
-                    # Store historical sales and stock per product
-                    for i, product_id in enumerate(self._env.state.products):
-                        single_episode_sales_per_product[product_id].append(
-                            max(0.0, next_obs['private_obs']['sales'][i].item()))
-                        current_price = self._env.state.products[product_id].current_price(
-                            markdown=self._env.state.last_actions[product_id][-1])
-                        single_episode_revenue_per_product[product_id].append(current_price * round(
-                            min(pre_step_stocks[i], max(0.0, next_obs['private_obs']['sales'][i].item()))))
-                        single_episode_stock_per_product[product_id].append(self._env.state.products[product_id].stock)
-
-                    # TODO: debug
-                    # if sum([single_episode_stock_per_product[product_id][-1] for product_id in
-                    #         self._env.state.products]) < 300:
-                    #     print(f"Mismatch")
-
-                    obs = next_obs
-                    current_markdown_duration += 1
-
-                # Normal training steps
+                learning_started = episode_i >= 200
+                if not learning_started:  # learning starts only after 100 episodes
+                    action_mask = self._env.mask_actions().astype(np.int8)
+                    actions = np.array(
+                        [self._env.action_space.sample(mask=action_mask[i]) for i in range(self._env.state.n_products)])
                 else:
-                    # Get observation in tensor format, since that is the shape and format what the actor expects
-                    obs_tensor = torch.Tensor(get_flatten_observation_from_state(obs)).to(self._device)
-
-                    if self._config.minimum_markdown_duration is not None \
-                            and current_markdown_duration < self._config.minimum_markdown_duration:
-                        action_mask = OnlyCurrentActionBooleanMask()(self._env.state)
-                    else:
-                        action_mask = self._env.mask_actions()
-
+                    action_mask = self._env.mask_actions()
                     # Get action from actor
+                    obs_tensor = torch.from_numpy(obs).to(self._device)
+                    actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
 
-                    # Epsilon greedy (\epsilon = \sqrt{t})
-                    if self._config.epsilon_greedy:
-                        epsilon = np.random.rand()
-                        if epsilon < max(self._config.epsilon_greedy_min_epsilon,
-                                         self._config.epsilon_greedy_epsilon_decay_rate ** global_step):
-                            print("Random action")
-                            actions = np.array(
-                                [self._env.action_space.sample(mask=action_mask.astype(np.int8)[i]) for i in
-                                 range(self._env.state.n_products)])
-                        else:
-                            actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
-                    else:
-                        actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
-                        # actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
-                    try:
-                        last_actions = [round(self._env.state.last_actions[product_id][-1] * 100) for product_id in
-                                        self._env.state.products]
-                    except:
-                        last_actions = [0.0 for _ in self._env.state.products]
-                    if not np.all(actions == np.array(last_actions)):
-                        current_markdown_duration = 0
-                    else:
-                        current_markdown_duration += 1
 
-                    # Execute action in environment
-                    orig_dones = self._env.state.per_product_done_signal
-                    pre_step_stocks = self._env.state.product_stocks
-                    next_obs, rewards, is_terminated, infos = self._env.step(actions, action_dtype="int")
-                    next_obs_tensor = torch.Tensor(get_flatten_observation_from_state(next_obs)).to(self._device)
-                    dones = self._env.state.per_product_done_signal
+                # # Warmup steps
+                # if not self._markdown_trigger_fn(state=self._env.state):
+                #     actions = np.array([0] * self._env.state.n_products).astype(int)
+                #
+                #     next_obs, rewards, is_terminated, infos = self._env.step(actions)
+                #
+                #     # Accumulate episode reward
+                #     episode_reward += rewards.sum()  # TODO: check if the wrapper is doing its job
+                #
+                #     # Logging
+                #     logger.log_info(infos)
+                #
+                #     obs = next_obs
+                #     current_markdown_duration += 1
+                #
+                # # Normal training steps
+                # else:
+                #     # Get observation in tensor format, since that is the shape and format what the actor expects
+                #     obs_tensor = torch.from_numpy(obs).to(self._device)
+                #
+                #     if self._config.minimum_markdown_duration is not None \
+                #             and current_markdown_duration < self._config.minimum_markdown_duration:
+                #         action_mask = OnlyCurrentActionBooleanMask()(self._env.state)
+                #     else:
+                #         action_mask = self._env.mask_actions()
 
-                    # Accumulate episode reward
-                    episode_reward += np.sum(convert_dict_to_numpy(rewards))
+                    # # Epsilon greedy (\epsilon = \sqrt{t})
+                    # if self._config.epsilon_greedy:
+                    #     epsilon = np.random.rand()
+                    #     if epsilon < max(self._config.epsilon_greedy_min_epsilon,
+                    #                      self._config.epsilon_greedy_epsilon_decay_rate ** global_step):
+                    #         print("Random action")
+                    #         actions = np.array(
+                    #             [self._env.action_space.sample(mask=action_mask.astype(np.int8)[i]) for i in
+                    #              range(self._env.state.n_products)])
+                    #     else:
+                    #         actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
+                    # else:
+                    #     actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
+                    #     # actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
+                    # try:
+                    #     last_actions = [round(self._env.state.last_actions[product_id][-1] * 100) for product_id in
+                    #                     self._env.state.products]
+                    # except:
+                    #     last_actions = [0.0 for _ in self._env.state.products]
+                    # if not np.all(actions == np.array(last_actions)):
+                    #     current_markdown_duration = 0
+                    # else:
+                    #     current_markdown_duration += 1
 
-                    # Store historical sales and stock per product
-                    for i, product_id in enumerate(self._env.state.products):
-                        single_episode_sales_per_product[product_id].append(
-                            max(0.0, next_obs['private_obs']['sales'][i].item()))
-                        current_price = self._env.state.products[product_id].current_price(
-                            markdown=self._env.state.last_actions[product_id][-1])
-                        single_episode_revenue_per_product[product_id].append(current_price * round(
-                            min(pre_step_stocks[i], max(0.0, next_obs['private_obs']['sales'][i].item()))))
-                        single_episode_stock_per_product[product_id].append(self._env.state.products[product_id].stock)
+                # Execute action in environment
+                orig_dones = self._env.state.per_product_done_signal
+                # pre_step_stocks = self._env.state.product_stocks
+                next_obs, rewards, is_terminated, infos = self._env.step(actions)
+                next_obs_tensor = torch.from_numpy(next_obs).to(self._device)
+                dones = self._env.state.per_product_done_signal
 
-                    # Add trajectory into the replay buffer
-                    self.replay_buffer.add(state=obs_tensor[~orig_dones], action=actions[~orig_dones],
-                                           reward=convert_dict_to_numpy(rewards)[~orig_dones],
-                                           next_state=next_obs_tensor[~orig_dones],
-                                           terminated=dones[~orig_dones])
+                # Accumulate episode reward
+                episode_reward += rewards.sum()
 
-                    obs = next_obs
+                # Logging
+                logger.log_info(infos)
 
+                # Add trajectory into the replay buffer
+                self.replay_buffer.add(state=obs[~orig_dones],
+                                       action=actions[~orig_dones],
+                                       reward=rewards[~orig_dones],
+                                       next_state=next_obs[~orig_dones],
+                                       terminated=dones[~orig_dones])
+
+                obs = next_obs
+
+                if learning_started:
                     # Update the networks every few steps (as configured)
                     if global_step % self._config.update_frequency == 0:
 
                         # Sample a batch from the replay buffer
-                        sample_obs_tensor, sample_actions, sample_next_obs_tensor, sample_rewards, sample_dones \
+                        sample_obs, sample_actions, sample_next_obs, sample_rewards, sample_dones \
                             = self.replay_buffer.sample(self._config.batch_size)
+
+                        sample_obs_tensor = sample_obs.to(self._device)
+                        sample_next_obs_tensor = sample_next_obs.to(self._device)
 
                         # CRITIC training
                         with torch.no_grad():
@@ -419,29 +412,9 @@ class SACDiscrete(RLAgent):
                                 "losses/actor_loss": actor_loss.item(),
                                 "losses/alpha": self._alpha,
                                 "global_step": global_step,
-                                # **{f"stock/{self._env.state.get_product_labels()[i]}": product.stock for i, product in
-                                #    enumerate(self._env.state.products.values())}
                             })
                         except NameError:
                             print(f"[Unable to log to wandb] Step {global_step}: qf1_a_values not defined")
-
-                # for i, product in enumerate(self._env.state.products.values()):
-                #     wandb.log({
-                #         "action": actions[i],
-                #         "product": str(product),
-                #         "episode_step": episode_step,
-                #         "episode": episode_i
-                #     })
-                #
-                # for product_id in self._env.state.products:
-                # actions_per_product = {f"actions/{str(self._env.state.products[product_id])}_{product_id}":  round(actions[i]/100, 2)
-                #                        for i, product_id in enumerate(self._env.state.products.keys())}
-                # wandb.log({
-                #     "actions/episode_step": episode_step,
-                #     "actions/episode": episode_i,
-                #     "actions/global_step": global_step,
-                #     **actions_per_product
-                # })
 
                 # Increment the step counters
                 global_step += 1
@@ -454,95 +427,32 @@ class SACDiscrete(RLAgent):
 
             # Use wandb to record rewards per episode
             if wandb_run is not None:
-                product_labels = self._env.state.get_product_labels()
-                actions_per_product = {
-                    f"{product_labels[i]}": self._env.state.last_actions[product_id]
-                    for i, product_id in enumerate(self._env.state.products)}
 
-                episode_step_action_df = pd.concat(
-                    [episode_step_action_df, pd.DataFrame({'Episode': [episode_i for _ in range(episode_step)],
-                                                           'Episode step': [k for k in range(episode_step)],
-                                                           **actions_per_product})])
-                action_fig = px.line(episode_step_action_df.loc[episode_step_action_df["Episode"] == episode_i],
-                                     x='Episode step', y=product_labels)
-                action_fig.update_layout(showlegend=False)
+                if episode_i % 10 == 0 or episode_i == self._config.n_episodes - 1:
+                    fig = logger.plot_episode_summary(title=f"Episode {episode_i}")
 
-                stock_per_product = {
-                    f"{product_labels[i]}": single_episode_stock_per_product[product_id]
-                    for i, product_id in enumerate(self._env.state.products)}
-                episode_step_stock_df = pd.concat(
-                    [episode_step_stock_df, pd.DataFrame({'Episode': [episode_i for _ in range(episode_step)],
-                                                          'Episode step': [k for k in range(episode_step)],
-                                                          **stock_per_product})])
-
-                stock_fig = px.line(episode_step_stock_df.loc[episode_step_stock_df["Episode"] == episode_i],
-                                    x='Episode step', y=product_labels)
-                stock_fig.update_layout(showlegend=False)
-
-                sales_per_product = {
-                    f"{product_labels[i]}": single_episode_sales_per_product[product_id]
-                    for i, product_id in enumerate(self._env.state.products)}
-
-                episode_step_sales_df = pd.concat(
-                    [episode_step_sales_df, pd.DataFrame({'Episode': [episode_i for _ in range(episode_step)],
-                                                          'Episode step': [k for k in range(episode_step)],
-                                                          **sales_per_product})])
-
-                sales_fig = px.line(episode_step_sales_df.loc[episode_step_sales_df["Episode"] == episode_i],
-                                    x='Episode step', y=product_labels)
-                sales_fig.update_layout(showlegend=False)
-
-                revenue_per_product = {
-                    f"{product_labels[i]}": single_episode_revenue_per_product[product_id]
-                    for i, product_id in enumerate(self._env.state.products)}
-
-                episode_step_revenue_df = pd.concat(
-                    [episode_step_revenue_df, pd.DataFrame({'Episode': [episode_i for _ in range(episode_step)],
-                                                            'Episode step': [k for k in range(episode_step)],
-                                                            **revenue_per_product})])
-
-                revenue_fig = px.line(episode_step_revenue_df.loc[episode_step_revenue_df["Episode"] == episode_i],
-                                      x='Episode step', y=product_labels)
-                revenue_fig.update_layout(showlegend=False)
-
-                # Create a 2x2 subplot layout
-                fig = make_subplots(rows=2, cols=2, shared_xaxes="all", vertical_spacing=0.15, horizontal_spacing=0.05,
-                                    subplot_titles=(f"Actions taken (ep. {episode_i})", f"Revenue (ep. {episode_i})",
-                                                    f"Stock (ep. {episode_i})", f"Sales (ep. {episode_i})"),
-                                    x_title="Episode step")
-
-                # Add each of the original figures to the subplots
-                for i, subplot_fig in enumerate([action_fig, revenue_fig, stock_fig, sales_fig]):
-                    for trace in subplot_fig['data']:
-                        fig.add_trace(trace, row=(i // 2) + 1, col=(i % 2) + 1)
-
-                # Update the layout to have a shared legend
-                # fig.update_layout(
-                #     legend=dict(
-                #         orientation="h",
-                #         yanchor="bottom",
-                #         y=1.02,
-                #         xanchor="right",
-                #         x=1
-                #     )
-                # )
-                fig.update_layout(showlegend=False)
-
-                wandb_log = {
-                    "buffer_usage": len(self.replay_buffer),
-                    "episode_reward": episode_reward,
-                    "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
-                        average_10_episode_reward),
-                    "cumulative_reward": cumulative_reward,
-                    "episode_step": episode_step,
-                    "episode": episode_i,
-                    "global_step": global_step,
-                    # "actions_taken_plot": action_fig,
-                    # "stock_plot": stock_fig,
-                    # "sales_plot": sales_fig,
-                    # "revenue_plot": revenue_fig
-                    "per_step_plots": fig
-                }
+                    wandb_log = {
+                        "buffer_usage": len(self.replay_buffer),
+                        "episode_reward": episode_reward,
+                        "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
+                            average_10_episode_reward),
+                        "cumulative_reward": cumulative_reward,
+                        "episode_step": episode_step,
+                        "episode": episode_i,
+                        "global_step": global_step,
+                        "summary_plots": fig
+                    }
+                else:
+                    wandb_log = {
+                        "buffer_usage": len(self.replay_buffer),
+                        "episode_reward": episode_reward,
+                        "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
+                            average_10_episode_reward),
+                        "cumulative_reward": cumulative_reward,
+                        "episode_step": episode_step,
+                        "episode": episode_i,
+                        "global_step": global_step
+                    }
                 wandb_run.log(wandb_log)
 
             # Increment episode counter

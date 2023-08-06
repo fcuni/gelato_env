@@ -11,7 +11,7 @@ class DefaultTrigger(BaseTrigger):
         name = "DefaultTrigger"
         super().__init__(name)
 
-    def __call__(self):
+    def __call__(self, *args, **kwargs) -> bool:
         if not self._triggered:
             self._triggered = True
         # if self._triggered:

@@ -1,13 +1,11 @@
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from pathlib import Path
 import os
 from typing import Optional
 import numpy as np
 import torch
 from torch.utils.data import random_split, DataLoader, TensorDataset
-
-import utils.types
-
+from utils.types import TensorType
 
 def get_root_dir() -> Path:
     return Path(os.path.dirname(os.path.realpath(__file__))).parent
@@ -71,7 +69,7 @@ def convert_dict_to_numpy(dictionary: Dict[str, Any]) -> np.ndarray:
     return np.array(list(dictionary.values()))
 
 
-def to_tensor(x: utils.types.TensorType, device: Optional[torch.device] = None) -> torch.Tensor:
+def to_tensor(x: TensorType, device: Optional[torch.device] = None) -> torch.Tensor:
     """
     Helper function to convert a numpy array or torch.Tensor to a torch.Tensor.
 

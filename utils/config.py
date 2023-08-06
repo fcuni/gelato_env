@@ -21,9 +21,9 @@ from torch.utils.data import Sampler
 from data_generators.gaussian_generators import StrongSeasonalGaussian
 from data_generators.generator import Generator
 from data_generators.sigmoid_generators import SigmoidGaussian
-from env.gelateria import GelateriaState, default_init_state
+from env.gelateria import GelateriaState, default_init_state, default_init_state_new
 from env.markdown_trigger.base_trigger import BaseTrigger
-from env.markdown_trigger.triggers import DelayTrigger
+from env.markdown_trigger.triggers import DelayTrigger, DefaultTrigger
 from env.mask.simple_masks import BooleanMonotonicMarkdownsMask, NoRestrictionBooleanMask
 from utils.misc import custom_collate_fn, get_root_dir
 
@@ -70,8 +70,7 @@ class DataGenerationConfig(BaseConfig):
     expected_sales_generator: Generator = StrongSeasonalGaussian()
     uplift_generator: Generator = SigmoidGaussian()
     cache_data: bool = True
-    init_state: GelateriaState = field(default_factory=default_init_state)
-
+    # init_state: GelateriaState = field(default_factory=default_init_state)
 
 @dataclass
 class DataLoaderConfig(BaseConfig):
@@ -117,8 +116,8 @@ class SACConfig(BaseConfig):
     alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
     buffer_size: int = 200000
     batch_size: int = 64
-    initial_random_steps: int = 2000   # 50000
-    target_network_frequency: int = 400  # 8000  # how often to update the target network (in steps)
+    initial_random_steps: int = 20000   # 50000
+    target_network_frequency: int = 8000  # 8000  # how often to update the target network (in steps)
     replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer.pkl"  # if path is provided, no new experience buffer is generated
     save_replay_buffer: bool = True
     target_entropy_scale: float = 0.7#0.89
@@ -126,21 +125,52 @@ class SACConfig(BaseConfig):
     waste_penalty: float = 0.0
     max_markdown_changes: int = 3  # TODO: not implemented yet
     regenerate_buffer: bool = True
-    update_frequency: int = 40  # how often to update the actor & critic network (in steps)
-    minimum_markdown_duration: Optional[int] = 1  # minimum number of days a markdown would last, if None, no minimum duration
-    warmup_steps: int = 120  # how many no-discount steps before taking actions from the policy network
+    update_frequency: int = 800  # how often to update the actor & critic network (in steps)
+    minimum_markdown_duration: Optional[int] = None  # minimum number of days a markdown would last, if None, no minimum duration
+    warmup_steps: int = 173  # how many no-discount steps before taking actions from the policy network
     markdown_trigger_fn: BaseTrigger = DelayTrigger(delay=warmup_steps)  # The function to decide if a markdown should be triggered
-    actor_network_hidden_layers: Optional[Sequence[int]] = (128, 128)
-    critic_network_hidden_layers: Optional[Sequence[int]] = (128, 128)
+    actor_network_hidden_layers: Optional[Sequence[int]] = (64,128, 128,64)
+    critic_network_hidden_layers: Optional[Sequence[int]] = (64,128, 128,64)
     epsilon_greedy: bool = True
-    epsilon_greedy_min_epsilon: float = 1e-3
-    epsilon_greedy_epsilon_decay_rate: float = 0.9
+    epsilon_greedy_min_epsilon: float = 2e-3
+    epsilon_greedy_epsilon_decay_rate: float = 0.99
+
+@dataclass
+class SACConfig_New_Env(BaseConfig):
+    seed: int = 42
+    torch_deterministic: bool = True
+    n_episodes: int = 500 #1000
+    gamma: float = 0.99
+    tau: float = 1.0#1e-2  #1.0
+    learning_rate: float = 5e-4
+    auto_entropy_tuning: bool = True
+    alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
+    buffer_size: int = 100000
+    batch_size: int = 128
+    initial_random_steps: int = 2400   # 50000
+    target_network_frequency: int = 1000  # 8000  # how often to update the target network (in steps)
+    replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer_new_env.pkl"  # if path is provided, no new experience buffer is generated
+    save_replay_buffer: bool = True
+    target_entropy_scale: float = 0.7 #0.7#0.89
+    markdown_penalty: float = 1.0
+    waste_penalty: float = 0.0
+    max_markdown_changes: int = 3  # TODO: not implemented yet
+    regenerate_buffer: bool = True
+    update_frequency: int = 20  # how often to update the actor & critic network (in steps)
+    minimum_markdown_duration: Optional[int] = None  # minimum number of days a markdown would last, if None, no minimum duration
+    warmup_steps: int = 173  # how many no-discount steps before taking actions from the policy network
+    markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
+    actor_network_hidden_layers: Optional[Sequence[int]] = (128, 512, 512, 128) # (64,128, 128,64)
+    critic_network_hidden_layers: Optional[Sequence[int]] = (128, 512, 512, 128)
+    epsilon_greedy: bool = True
+    epsilon_greedy_min_epsilon: float = 2e-3
+    epsilon_greedy_epsilon_decay_rate: float = 0.99
 
 
 @dataclass
 class WandbConfig(BaseConfig):
     use_wandb: bool = True
-    project: str = "msc_project_v3"
+    project: str = "msc_project_v2"
     entity: str = "timc"
     mode: str = "online"
 
@@ -164,7 +194,9 @@ class TDZeroExperimentConfig(ExperimentConfig):
 
 @dataclass
 class SACExperimentConfig(ExperimentConfig):
-    sac_config: SACConfig = field(default_factory=SACConfig)
+    # sac_config: SACConfig = field(default_factory=SACConfig)
+    sac_config: SACConfig_New_Env = field(default_factory=SACConfig_New_Env)
+
 
 @dataclass
 class SupervisedExperimentConfig(ExperimentConfig):

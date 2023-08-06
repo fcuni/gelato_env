@@ -64,7 +64,7 @@ class GelateriaEnv_v2(gym.Env):
                  reward: BaseReward,
                  mask_fn: Callable[[], ActionMask] = MonotonicMarkdownsMask,
                  restock_fct: Optional[Callable[[Gelato], int]] = None,
-                 max_stock: Optional[int] = None,
+                 # max_stock: Optional[int] = None,
                  max_steps: int = 10,  # int(1e8)
                  days_per_step: int = 7,
                  obs_transform_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
@@ -77,7 +77,7 @@ class GelateriaEnv_v2(gym.Env):
             sales_model: Sales model to use for the environment.
             reward: Reward function to use for the environment.
             restock_fct: Function to use for restocking the products. If None, the initial stock is used.
-            max_stock: Maximum stock level for each product.
+            # max_stock: Maximum stock level for each product.
             max_steps: Maximum number of steps before the environment is reset.
         """
 
@@ -103,10 +103,11 @@ class GelateriaEnv_v2(gym.Env):
         # Define the observation and action spaces
         observation_spaces = {
             'current_markdown': Box(low=0, high=1, dtype=np.float32),
-            'day_of_year': Box(low=0, high=365, dtype=int),  # current day of the year
-            'available_stock': Box(low=0, high=np.inf, dtype=int),  # 'stock_level': Box(low=0, high=np.inf, dtype=int),
+            'day_of_year': Box(low=0, high=1, dtype=np.float32),  # current day of the year / 365
+            'available_stock': Box(low=0, high=1, dtype=np.float32),  # available stock divided by max stock
             'normalised_base_price': Box(low=0, high=1, dtype=np.float32),  # normalised
-            'last_sales': Box(low=0, high=np.inf, dtype=np.float32),
+            # 'last_sales': Box(low=0, high=np.inf, dtype=np.float32),
+            'remaining_steps': Box(low=0, high=self._max_steps, dtype=int),
             'flavour': OneHotEncoding(n=len(Flavour.get_all_flavours()))
         }
 
@@ -278,27 +279,45 @@ class GelateriaEnv_v2(gym.Env):
 
         # TODO: this should move to get_public_observations in gelateria.py
         public_obs_tensor = []
+        sales_model_input_tensor = []
         all_flavour_encoding = Flavour.get_flavour_encoding()
         n_flavours = len(Flavour.get_all_flavours())
         for product_id, product in state.products.items():
             flavour_encoding = all_flavour_encoding[product.flavour.value]
-
-            # get the observations for each product
             current_markdown = torch.tensor(state.current_markdowns[product_id])
-            day_of_year = torch.tensor(state.current_date.timetuple().tm_yday) - 1  # the -1 is to make it 0-indexed
-            available_stock = torch.tensor(product.stock)
-            base_price = torch.tensor(product.base_price)
+            day_of_year = torch.tensor(
+                state.current_date.timetuple().tm_yday) - 1  # the -1 is to make it 0-indexed # TODO: divide this by 365
+            available_stock = torch.tensor(product.stock)  # TODO: divide by max stock
+            base_price = torch.tensor(product.base_price)  # TODO: divide by max price
             last_sales = torch.tensor(0.0) if len(state.historical_sales[product_id]) == 0 else \
                 torch.tensor(state.historical_sales[product_id][-1])
+            remaining_steps = torch.tensor(self._max_steps - state.step)
             flavour_one_hot = torch.nn.functional.one_hot(torch.tensor(flavour_encoding), n_flavours)
+
+            # get the public observations for each product (different from the ones used in the sales model)
             public_obs_tensor.append(torch.hstack(
-                [current_markdown, day_of_year, available_stock, base_price, last_sales, flavour_one_hot]).float())
+                [current_markdown,
+                 day_of_year / 365,
+                 available_stock / state.max_stock,
+                 base_price,
+                 remaining_steps / self._max_steps,
+                 flavour_one_hot]).float())
             public_obs = torch.vstack(public_obs_tensor)
 
-        sales, sales_info = self._sales_model.get_sales(public_obs, output_info=True)
+            # get the observations for the sales model for each product
+            sales_model_input_tensor.append(torch.hstack(
+                [current_markdown,
+                 day_of_year,
+                 available_stock,
+                 base_price,
+                 last_sales,
+                 flavour_one_hot]).float())
+            sales_model_input = torch.vstack(sales_model_input_tensor)
+
+        sales, sales_info = self._sales_model.get_sales(sales_model_input, output_info=True)
         combined_sales_info = {
             "sales_not_clipped": {product_id: sales[i] for i, product_id in enumerate(state.products)},
-            "sales": {product_id: max(0, min(state.products[product_id].stock, int(sales[i]))) for i, product_id in
+            "sales": {product_id: int(max(0, min(state.products[product_id].stock, sales[i]))) for i, product_id in
                       enumerate(state.products)}}
         for info_key, info_val in sales_info.items():
             if isinstance(info_val, list):
@@ -334,6 +353,8 @@ class GelateriaEnv_v2(gym.Env):
         """
 
         assert self._state is not None, "The environment must be reset before stepping it."
+        assert self._state.is_terminal is False, "The environment has terminated. Please reset it."
+
         if action_dtype is not None:
             if action_dtype == "int":
                 if isinstance(action, List):
@@ -369,76 +390,66 @@ class GelateriaEnv_v2(gym.Env):
 
         return observations, self._state.local_reward, self._state.is_terminal, info
 
-    # def get_single_observation_space_size(self):
-    #     """Return the observation space size of a single agent. Public observations only."""
-    #     assert self._state is not None
-    #     return self._state.get_public_observations().shape
+    def get_single_observation_space_size(self):
+        """Return the observation space size of a single agent. Public observations only."""
+        assert self._state is not None
+        return self.get_observations(self._state)['public_obs'].shape
 
-    def sample(self, size: Optional[int] = None) -> np.ndarray:
-        """Sample observations from the environment.
-
-        Args:
-            size: The number of observations to sample. If None, a single observation is sampled.
-        """
-
-        def sample_one_obs():
-            sampled_obs = self.observation_space.sample()
-            # TODO: check if we want to keep 365 in config
-            day_of_year = np.clip(np.round(sampled_obs['day_of_year'] * 365), a_min=0, a_max=365) / 365
-            md = np.round(sampled_obs['current_markdowns'], 2)
-            # [RANDOM PRODUCT APPROACH]: sample a product from the flavour encoding index of each product available in
-            #   the Gelato shop
-            random_product = np.random.choice([Flavour.get_flavour_encoding()[self._state.products[
-                list(self._state.products.keys())[i]].flavour.value] for i in range(self._state.n_products)])
-            flavour = np.zeros(len(Flavour.get_all_flavours()), dtype=np.float32)
-            flavour[random_product] = 1.0
-            stock_level = sampled_obs['stock_level']
-            base_price = sampled_obs['base_price']
-            return np.concatenate([day_of_year, stock_level, base_price, md, flavour])
-
-        if size is None:
-            return sample_one_obs()
-        else:
-            return np.array([sample_one_obs() for _ in range(size)])
-
-    def sample_from_current_store(self) -> Tuple[GelateriaState, np.ndarray]:
-        """Sample observations from the current store (based on the products in the store)
-
-        Returns:
-            sampled_state: A sampled state of the environment.
-            sampled_observation: The public observation of the sampled observation.
-        """
-        assert self._state is not None, "The environment must be reset before sampling from it."
-        current_obs = self._state.get_public_observations()
-        sampled_obs = self.sample(size=self._state.n_products)
-        day_of_year = (np.array([sampled_obs[0, 0]] * self._state.n_products)).reshape(-1, 1)
-        stock_level = (np.round(self._state.max_stock * sampled_obs[:, 1]) / self._state.max_stock).reshape(-1, 1)
-        base_price = current_obs[:, 2].reshape(-1, 1)
-        md = sampled_obs[:, 3].reshape(-1, 1)
-        flavour = current_obs[:, -len(Flavour.get_all_flavours()):]
-        sampled_observation = np.concatenate([day_of_year, stock_level, base_price, md, flavour], axis=1)
-
-        sampled_state = deepcopy(self._init_state)
-        sampled_state.day_number = round(day_of_year[0, 0] * 365)
-
-        for i, key in enumerate(sampled_state.products.keys()):
-            sampled_state.products[key].stock = round(stock_level[i, 0] * sampled_state.max_stock)
-            sampled_state.current_markdowns[key] = md[i, 0]
-            # sampled_state.last_markdowns[key] = md[i, 0]
-            # sampled_state.last_actions[key].append(md[i, 0])
-
-        return sampled_state, sampled_observation
-
-    # def hallucinate(self, size: Optional[int] = None) -> np.ndarray:
-    #         """Sample observations from the environment.
+    # def sample(self, size: Optional[int] = None) -> np.ndarray:
+    #     """Sample observations from the environment.
     #
-    #         Args:
-    #             size: The number of observations to sample. If None, a single observation is sampled.
-    #         """
-    #         sample_obs = self.sample()
-    #         sample_state = deepcopy(self._state)
-    #         sample_state.day_number = np.clip(np.round(sample_obs[0]*365), a_min=0, a_max=365)
-    #         sample_state.stock_level = sample_obs[1]
+    #     Args:
+    #         size: The number of observations to sample. If None, a single observation is sampled.
+    #     """
+    #
+    #     def sample_one_obs():
+    #         sampled_obs = self.observation_space.sample()
+    #         # TODO: check if we want to keep 365 in config
+    #         day_of_year = np.clip(np.round(sampled_obs['day_of_year'] * 365), a_min=0, a_max=365) / 365
+    #         md = np.round(sampled_obs['current_markdowns'], 2)
+    #         # [RANDOM PRODUCT APPROACH]: sample a product from the flavour encoding index of each product available in
+    #         #   the Gelato shop
+    #         random_product = np.random.choice([Flavour.get_flavour_encoding()[self._state.products[
+    #             list(self._state.products.keys())[i]].flavour.value] for i in range(self._state.n_products)])
+    #         flavour = np.zeros(len(Flavour.get_all_flavours()), dtype=np.float32)
+    #         flavour[random_product] = 1.0
+    #         stock_level = sampled_obs['stock_level']
+    #         base_price = sampled_obs['base_price']
+    #         return np.concatenate([day_of_year, stock_level, base_price, md, flavour])
+    #
+    #     if size is None:
+    #         return sample_one_obs()
+    #     else:
+    #         return np.array([sample_one_obs() for _ in range(size)])
+    #
+    # def sample_from_current_store(self) -> Tuple[GelateriaState, np.ndarray]:
+    #     """Sample observations from the current store (based on the products in the store)
+    #
+    #     Returns:
+    #         sampled_state: A sampled state of the environment.
+    #         sampled_observation: The public observation of the sampled observation.
+    #     """
+    #     assert self._state is not None, "The environment must be reset before sampling from it."
+    #     current_obs = self._state.get_public_observations()
+    #     sampled_obs = self.sample(size=self._state.n_products)
+    #     day_of_year = (np.array([sampled_obs[0, 0]] * self._state.n_products)).reshape(-1, 1)
+    #     stock_level = (np.round(self._state.max_stock * sampled_obs[:, 1]) / self._state.max_stock).reshape(-1, 1)
+    #     base_price = current_obs[:, 2].reshape(-1, 1)
+    #     md = sampled_obs[:, 3].reshape(-1, 1)
+    #     flavour = current_obs[:, -len(Flavour.get_all_flavours()):]
+    #     sampled_observation = np.concatenate([day_of_year, stock_level, base_price, md, flavour], axis=1)
+    #
+    #     sampled_state = deepcopy(self._init_state)
+    #     sampled_state.day_number = round(day_of_year[0, 0] * 365)
+    #
+    #     for i, key in enumerate(sampled_state.products.keys()):
+    #         sampled_state.products[key].stock = round(stock_level[i, 0] * sampled_state.max_stock)
+    #         sampled_state.current_markdowns[key] = md[i, 0]
+    #         # sampled_state.last_markdowns[key] = md[i, 0]
+    #         # sampled_state.last_actions[key].append(md[i, 0])
+    #
+    #     return sampled_state, sampled_observation
+
 
     @override(gym.Env)
     def reset(self):
@@ -449,4 +460,5 @@ class GelateriaEnv_v2(gym.Env):
         self._is_reset = True
         self._global_step = 0
 
-        return self.get_observations(self._state), self._state.local_reward, self._state.is_terminal, self.get_info()
+        return self.get_observations(self._state), self._state.local_reward, self._state.is_terminal, \
+            self.get_info()
