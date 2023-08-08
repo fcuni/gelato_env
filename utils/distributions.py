@@ -16,19 +16,18 @@ class CategoricalMasked(Categorical):
         self.batch, self.nb_action = probs_or_logits.size()
         if mask is None:
             if logits is not None:
-                super(CategoricalMasked, self).__init__(logits=probs_or_logits)
+                super(CategoricalMasked, self).__init__(logits=probs_or_logits, validate_args=False)
             else:
-                super(CategoricalMasked, self).__init__(probs=probs_or_logits)
+                super(CategoricalMasked, self).__init__(probs=probs_or_logits, validate_args=False)
         else:
             self.mask = mask.bool()
-            self.mask_value = torch.tensor(torch.finfo(probs_or_logits.dtype).min,
-                                           dtype=probs_or_logits.dtype) if logits is not None else torch.tensor(0,
-                                                                                                                dtype=probs_or_logits.dtype)
+            self.mask_value = torch.tensor(torch.finfo(probs_or_logits.dtype).min, dtype=probs_or_logits.dtype) \
+                if logits is not None else torch.tensor(0, dtype=probs_or_logits.dtype)
             probs_or_logits = torch.where(self.mask, probs_or_logits, self.mask_value)
             if logits is not None:
-                super(CategoricalMasked, self).__init__(logits=probs_or_logits)
+                super(CategoricalMasked, self).__init__(logits=probs_or_logits, validate_args=False)
             else:
-                super(CategoricalMasked, self).__init__(probs=probs_or_logits)
+                super(CategoricalMasked, self).__init__(probs=probs_or_logits, validate_args=False)
 
     def entropy(self):
         if self.mask is None:

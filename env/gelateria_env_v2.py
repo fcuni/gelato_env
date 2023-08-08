@@ -99,7 +99,13 @@ class GelateriaEnv_v2(gym.Env):
         self._days_per_step = days_per_step
         # self._obs_transform_fn = transform_gym_inputs if obs_transform_fn is not None else lambda x: x
 
-        self._mask = first_not_none(mask_fn, IdentityMask)()
+        # Define the markdown trigger
+        mask_fn = first_not_none(mask_fn, IdentityMask)
+        from inspect import signature
+        if 'state' in signature(mask_fn).parameters:
+            self._mask = mask_fn
+        else:
+            self._mask = mask_fn()
         # Define the observation and action spaces
         observation_spaces = {
             'current_markdown': Box(low=0, high=1, dtype=np.float32),
@@ -300,6 +306,7 @@ class GelateriaEnv_v2(gym.Env):
                  day_of_year / 365,
                  available_stock / state.max_stock,
                  base_price,
+                 # torch.log(last_sales/state.max_stock + 1),
                  remaining_steps / self._max_steps,
                  flavour_one_hot]).float())
             public_obs = torch.vstack(public_obs_tensor)
@@ -313,6 +320,8 @@ class GelateriaEnv_v2(gym.Env):
                  last_sales,
                  flavour_one_hot]).float())
             sales_model_input = torch.vstack(sales_model_input_tensor)
+
+            public_obs = sales_model_input  # TODO: test only
 
         sales, sales_info = self._sales_model.get_sales(sales_model_input, output_info=True)
         combined_sales_info = {
@@ -376,15 +385,6 @@ class GelateriaEnv_v2(gym.Env):
             self._state.is_terminal = True
             logger.info(f"The episode has terminated after reaching the max number of "
                         f"steps.")
-
-        # TODO: check if this is the right way to incorporate the terminal penalty
-        if self._state.is_terminal:
-            # logger.info(f"The episode has terminated after {self._global_step} steps.")
-            try:
-                terminal_penalty: Dict[str, float] = self._reward.get_terminal_penalty(self._state)
-                self._update_terminal_reward(self._state, terminal_penalty)
-            except NotImplementedError:
-                pass
 
         info = {**(observations['private_obs']), **(self.get_info())}
 

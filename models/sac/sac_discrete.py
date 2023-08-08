@@ -15,24 +15,19 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Optional, Dict, Any, Union
 
-import pandas as pd
 import gym
 import numpy as np
 import torch
 
 import torch.optim as optim
 import torch.nn.functional as F
-from plotly.subplots import make_subplots
 
 EnvType = Union[gym.Env, gym.core.Env]
-from env.mask.simple_masks import OnlyCurrentActionBooleanMask
+from env.mask.simple_masks import OnlyCurrentActionBooleanMask, BooleanMonotonicMarkdownsMask
 from models.base_rl_agent import RLAgent
 from models.sac.networks import ActorNetwork, SoftQNetwork
-from utils.buffer import ReplayBuffer
-from models.sac.utils import collect_random_v2, collect_random_v3
-from utils.misc import get_flatten_observation_from_state, convert_dict_to_numpy
+from utils.buffer import ReplayBuffer_v2 as ReplayBuffer
 from utils.config import SACConfig
-import plotly.express as px
 from wandb.wandb_run import Run
 
 from utils.types import TensorType
@@ -115,18 +110,36 @@ class SACDiscrete(RLAgent):
         self._qf1_target.eval()
         self._qf2_target.eval()
 
-    def act(self, obs: Union[Dict[str, Any], TensorType]) -> np.ndarray:
+    # def act(self, obs: Union[Dict[str, Any], TensorType], evaluation: bool = False) -> np.ndarray:
+    #     """Act based on the observation.
+    #
+    #     Args:
+    #         obs (Dict[str, Any]): Observation from the environment.
+    #         evaluation (bool, optional): Whether to act deterministically or stochastically. Defaults to False.
+    #
+    #     Returns:
+    #         np.ndarray: Action to take in the environment.
+    #     """
+    #     obs = obs.to(self._device)
+    #     if evaluation:
+    #         return self._actor.evaluate(obs, mask=self._env.mask_actions(obs))[0]
+    #     return self._actor.get_det_action(obs, mask=self._env.mask_actions(obs))  # TODO: check if we need to use stochastic action
+
+    def select_action(self, obs: Union[Dict[str, Any], TensorType], evaluation: bool = False,
+                      mask: Optional[TensorType] = None) -> np.ndarray:
         """Act based on the observation.
 
         Args:
             obs (Dict[str, Any]): Observation from the environment.
+            evaluation (bool, optional): Whether to act deterministically or stochastically. Defaults to False.
 
         Returns:
             np.ndarray: Action to take in the environment.
         """
-        if isinstance(obs, dict):
-            obs = get_flatten_observation_from_state(obs)
-        return self._actor.get_det_action(obs, mask=self._env.mask_actions(obs))
+        obs = obs.to(self._device)
+        if evaluation:
+            return self._actor.evaluate(obs, mask=mask)[0]
+        return self._actor.get_det_action(obs, mask=mask)
 
     @property
     def configs(self) -> Dict[str, Any]:
@@ -135,7 +148,7 @@ class SACDiscrete(RLAgent):
             "sac/episodes": self._config.n_episodes,
             "sac/buffer_size": self._config.buffer_size,
             "sac/batch_size": self._config.batch_size,
-            "sac/initial_random_steps": self._config.initial_random_steps,
+            "sac/warmup_episodes": self._config.warmup_episodes,
             "sac/learning_rate": self._config.learning_rate,
             "sac/gamma": self._config.gamma,
             "sac/tau": self._config.tau,
@@ -143,14 +156,9 @@ class SACDiscrete(RLAgent):
             "sac/alpha": self._config.alpha,
             "sac/update_frequency": self._config.update_frequency,
             "sac/target_network_frequency": self._config.target_network_frequency,
-            "sac/minimum_markdown_duration": self._config.minimum_markdown_duration,
             "sac/markdown_trigger_fn": self._markdown_trigger_fn.name,
-            "sac/warmup_steps": self._config.warmup_steps,
             "sac/actor/hidden_layers": self._config.actor_network_hidden_layers,
             "sac/critic/hidden_layers": self._config.critic_network_hidden_layers,
-            "sac/epsilon_greedy": self._config.epsilon_greedy,
-            "sac/epsilon_greedy_min_epsilon": self._config.epsilon_greedy_min_epsilon,
-            "sac/epsilon_greedy_epsilon_decay_rate": self._config.epsilon_greedy_epsilon_decay_rate
         }
 
     def initialise_models(self):
@@ -188,6 +196,90 @@ class SACDiscrete(RLAgent):
         else:
             self._alpha = self._config.alpha
 
+    def update_parameters(self, memory, current_step):
+
+        if current_step % self._config.update_frequency == 0:
+
+            sample_obs, sample_actions, sample_next_obs, sample_rewards, sample_dones, sample_mask = memory
+
+            sample_obs_tensor = sample_obs.to(self._device)
+            sample_next_obs_tensor = sample_next_obs.to(self._device)
+
+            # CRITIC training
+            with torch.no_grad():
+                # TODO: check if we need to mask actions here
+                # _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(
+                #     sample_next_obs_tensor, mask=sample_mask)
+                _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(
+                    sample_next_obs_tensor, mask=sample_mask)
+                qf1_next_target = self._qf1_target(sample_next_obs_tensor)
+                qf2_next_target = self._qf2_target(sample_next_obs_tensor)
+                # we can use the action probabilities instead of MC sampling to estimate the expectation
+                min_qf_next_target = next_state_action_probs * (
+                        torch.min(qf1_next_target, qf2_next_target) - self._alpha * next_state_log_pi
+                )
+
+                # adapt Q-target for discrete Q-function
+                min_qf_next_target = min_qf_next_target.sum(dim=1)
+                next_q_value = sample_rewards.flatten() + (
+                        1 - sample_dones.flatten()) * self._config.gamma * min_qf_next_target
+
+            # use Q-values only for the taken actions
+            qf1_values = self._qf1(sample_obs_tensor)
+            qf2_values = self._qf2(sample_obs_tensor)
+            qf1_a_values = qf1_values.gather(1, sample_actions.long()).view(-1)
+            qf2_a_values = qf2_values.gather(1, sample_actions.long()).view(-1)
+            qf1_loss = F.mse_loss(qf1_a_values, next_q_value) # JQ = 𝔼(st,at)~D[0.5(Q1(st,at) - r(st,at) - γ(𝔼st+1~p[V(st+1)]))^2]
+            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+            qf_loss = qf1_loss + qf2_loss
+
+            self._q_optimizer.zero_grad()
+            qf_loss.backward()
+            self._q_optimizer.step()
+
+            # ACTOR training
+            _, action_probs, log_pi = self._actor.evaluate(sample_obs_tensor, mask=sample_mask)
+            # mask=self._env.mask_actions(sample_obs_tensor))
+            with torch.no_grad():
+                qf1_values = self._qf1(sample_obs_tensor)
+                qf2_values = self._qf2(sample_obs_tensor)
+                min_qf_values = torch.min(qf1_values, qf2_values)
+            # Re-parameterization is not needed, as the expectation can be calculated for discrete actions
+            actor_loss = (action_probs * ((self._alpha * log_pi) - min_qf_values)).mean()
+
+            self._actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self._actor_optimizer.step()
+
+            # Update the temperature parameter (if auto entropy tuning is on)
+            if self._config.auto_entropy_tuning:
+                # re-use action probabilities for temperature loss
+                alpha_loss = (action_probs.detach() * (
+                        -self._log_alpha * (log_pi + self._target_entropy).detach())).mean()
+
+                self._a_optimizer.zero_grad()
+                alpha_loss.backward()
+                self._a_optimizer.step()
+                self._alpha = self._log_alpha.exp().item()
+
+        # Update the target networks
+        if current_step % self._config.target_network_frequency == 0:
+            for param, target_param in zip(self._qf1.parameters(), self._qf1_target.parameters()):
+                target_param.data.copy_(self._config.tau * param.data + (
+                        1 - self._config.tau) * target_param.data)
+            for param, target_param in zip(self._qf2.parameters(), self._qf2_target.parameters()):
+                target_param.data.copy_(self._config.tau * param.data + (
+                        1 - self._config.tau) * target_param.data)
+
+        return {"qf1_loss": qf1_loss.item(),
+                "qf2_loss": qf2_loss.item(),
+                "qf_loss": qf_loss.item() / 2.0,  # divide by 2 to match the scale of the other losses
+                "actor_loss": actor_loss.item(),
+                "alpha_loss": alpha_loss.item(),
+                "qf1_values": qf1_a_values.mean().item(),
+                "qf2_values": qf2_a_values.mean().item(),
+                "alpha": self._alpha}
+
     def train(self, wandb_run: Optional[Run] = None):
         """Train the agent."""
 
@@ -209,27 +301,15 @@ class SACDiscrete(RLAgent):
         episode_i: int = 0
         cumulative_reward: float = 0.0
         average_10_episode_reward: Deque = deque(maxlen=10)
-        # episode_step_action_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-        #                                                         *(self._env.state.get_product_labels())])
-        # episode_step_stock_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-        #                                                        *(self._env.state.get_product_labels())])
-        # episode_step_sales_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-        #                                                        *(self._env.state.get_product_labels())])
-        # episode_step_revenue_df = pd.DataFrame(data=[], columns=['Episode', 'Episode step',
-        #                                                          *(self._env.state.get_product_labels())])
 
         # Loop over episodes
         while episode_i < self._config.n_episodes:
 
-
-
             print(f"Starting Episode {episode_i}...")
-
 
             # Initialise variables for episode
             episode_reward: float = 0.0
             episode_step: int = 0
-            current_markdown_duration: int = 0
             self._markdown_trigger_fn.reset()
             logger = EpisodeLogger()
 
@@ -242,73 +322,25 @@ class SACDiscrete(RLAgent):
             # Training Loop for single episode
             while not is_terminated:
 
-                learning_started = episode_i >= 200
-                if not learning_started:  # learning starts only after 100 episodes
+                learning_started = episode_i >= self._config.warmup_episodes
+
+                # Warmup phase: collect random actions
+                if not learning_started:
                     action_mask = self._env.mask_actions().astype(np.int8)
                     actions = np.array(
                         [self._env.action_space.sample(mask=action_mask[i]) for i in range(self._env.state.n_products)])
+
+                # Normal training phase
                 else:
                     action_mask = self._env.mask_actions()
                     # Get action from actor
                     obs_tensor = torch.from_numpy(obs).to(self._device)
                     actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
 
-
-                # # Warmup steps
-                # if not self._markdown_trigger_fn(state=self._env.state):
-                #     actions = np.array([0] * self._env.state.n_products).astype(int)
-                #
-                #     next_obs, rewards, is_terminated, infos = self._env.step(actions)
-                #
-                #     # Accumulate episode reward
-                #     episode_reward += rewards.sum()  # TODO: check if the wrapper is doing its job
-                #
-                #     # Logging
-                #     logger.log_info(infos)
-                #
-                #     obs = next_obs
-                #     current_markdown_duration += 1
-                #
-                # # Normal training steps
-                # else:
-                #     # Get observation in tensor format, since that is the shape and format what the actor expects
-                #     obs_tensor = torch.from_numpy(obs).to(self._device)
-                #
-                #     if self._config.minimum_markdown_duration is not None \
-                #             and current_markdown_duration < self._config.minimum_markdown_duration:
-                #         action_mask = OnlyCurrentActionBooleanMask()(self._env.state)
-                #     else:
-                #         action_mask = self._env.mask_actions()
-
-                    # # Epsilon greedy (\epsilon = \sqrt{t})
-                    # if self._config.epsilon_greedy:
-                    #     epsilon = np.random.rand()
-                    #     if epsilon < max(self._config.epsilon_greedy_min_epsilon,
-                    #                      self._config.epsilon_greedy_epsilon_decay_rate ** global_step):
-                    #         print("Random action")
-                    #         actions = np.array(
-                    #             [self._env.action_space.sample(mask=action_mask.astype(np.int8)[i]) for i in
-                    #              range(self._env.state.n_products)])
-                    #     else:
-                    #         actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
-                    # else:
-                    #     actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
-                    #     # actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
-                    # try:
-                    #     last_actions = [round(self._env.state.last_actions[product_id][-1] * 100) for product_id in
-                    #                     self._env.state.products]
-                    # except:
-                    #     last_actions = [0.0 for _ in self._env.state.products]
-                    # if not np.all(actions == np.array(last_actions)):
-                    #     current_markdown_duration = 0
-                    # else:
-                    #     current_markdown_duration += 1
-
                 # Execute action in environment
                 orig_dones = self._env.state.per_product_done_signal
-                # pre_step_stocks = self._env.state.product_stocks
                 next_obs, rewards, is_terminated, infos = self._env.step(actions)
-                next_obs_tensor = torch.from_numpy(next_obs).to(self._device)
+                # next_obs_tensor = torch.from_numpy(next_obs).to(self._device)
                 dones = self._env.state.per_product_done_signal
 
                 # Accumulate episode reward
@@ -322,99 +354,30 @@ class SACDiscrete(RLAgent):
                                        action=actions[~orig_dones],
                                        reward=rewards[~orig_dones],
                                        next_state=next_obs[~orig_dones],
-                                       terminated=dones[~orig_dones])
+                                       terminated=dones[~orig_dones],
+                                       action_mask=action_mask[~orig_dones])
 
                 obs = next_obs
 
                 if learning_started:
+
                     # Update the networks every few steps (as configured)
                     if global_step % self._config.update_frequency == 0:
 
                         # Sample a batch from the replay buffer
-                        sample_obs, sample_actions, sample_next_obs, sample_rewards, sample_dones \
-                            = self.replay_buffer.sample(self._config.batch_size)
+                        memory = self.replay_buffer.sample(self._config.batch_size)
 
-                        sample_obs_tensor = sample_obs.to(self._device)
-                        sample_next_obs_tensor = sample_next_obs.to(self._device)
+                        parameters_update_log = self.update_parameters(memory, global_step)
 
-                        # CRITIC training
-                        with torch.no_grad():
-                            _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(
-                                sample_next_obs_tensor, mask=self._env.mask_actions(sample_next_obs_tensor))
-                            qf1_next_target = self._qf1_target(sample_next_obs_tensor)
-                            qf2_next_target = self._qf2_target(sample_next_obs_tensor)
-                            # we can use the action probabilities instead of MC sampling to estimate the expectation
-                            min_qf_next_target = next_state_action_probs * (
-                                    torch.min(qf1_next_target, qf2_next_target) - self._alpha * next_state_log_pi
-                            )
-                            # adapt Q-target for discrete Q-function
-                            min_qf_next_target = min_qf_next_target.sum(dim=1)
-                            next_q_value = sample_rewards.flatten() + (
-                                    1 - sample_dones.flatten()) * self._config.gamma * min_qf_next_target
-
-                        # use Q-values only for the taken actions
-                        qf1_values = self._qf1(sample_obs_tensor)
-                        qf2_values = self._qf2(sample_obs_tensor)
-                        qf1_a_values = qf1_values.gather(1, sample_actions.long()).view(-1)
-                        qf2_a_values = qf2_values.gather(1, sample_actions.long()).view(-1)
-                        qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-                        qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-                        qf_loss = qf1_loss + qf2_loss
-
-                        self._q_optimizer.zero_grad()
-                        qf_loss.backward()
-                        self._q_optimizer.step()
-
-                        # ACTOR training
-                        _, action_probs, log_pi = self._actor.evaluate(sample_obs_tensor,
-                                                                       mask=self._env.mask_actions(sample_obs_tensor))
-                        with torch.no_grad():
-                            qf1_values = self._qf1(sample_obs_tensor)
-                            qf2_values = self._qf2(sample_obs_tensor)
-                            qf2_values = self._qf2(sample_obs_tensor)
-                            min_qf_values = torch.min(qf1_values, qf2_values)
-                        # Re-parameterization is not needed, as the expectation can be calculated for discrete actions
-                        actor_loss = (action_probs * ((self._alpha * log_pi) - min_qf_values)).mean()
-
-                        self._actor_optimizer.zero_grad()
-                        actor_loss.backward()
-                        self._actor_optimizer.step()
-
-                        # Update the temperature parameter (if auto entropy tuning is on)
-                        if self._config.auto_entropy_tuning:
-                            # re-use action probabilities for temperature loss
-                            alpha_loss = (action_probs.detach() * (
-                                    -self._log_alpha * (log_pi + self._target_entropy).detach())).mean()
-
-                            self._a_optimizer.zero_grad()
-                            alpha_loss.backward()
-                            self._a_optimizer.step()
-                            self._alpha = self._log_alpha.exp().item()
-
-                    # Update the target networks
-                    if global_step % self._config.target_network_frequency == 0:
-                        for param, target_param in zip(self._qf1.parameters(), self._qf1_target.parameters()):
-                            target_param.data.copy_(self._config.tau * param.data + (
-                                    1 - self._config.tau) * target_param.data)
-                        for param, target_param in zip(self._qf2.parameters(), self._qf2_target.parameters()):
-                            target_param.data.copy_(self._config.tau * param.data + (
-                                    1 - self._config.tau) * target_param.data)
-
-                    # Log the losses to wandb
-                    if wandb_run is not None:
-                        try:
-                            wandb_run.log({
-                                "losses/qf1_values": qf1_a_values.mean().item(),
-                                "losses/qf2_values": qf2_a_values.mean().item(),
-                                "losses/qf1_loss": qf1_loss.item(),
-                                "losses/qf2_loss": qf2_loss.item(),
-                                "losses/qf_loss": qf_loss.item() / 2.0,
-                                "losses/actor_loss": actor_loss.item(),
-                                "losses/alpha": self._alpha,
-                                "global_step": global_step,
-                            })
-                        except NameError:
-                            print(f"[Unable to log to wandb] Step {global_step}: qf1_a_values not defined")
+                        # Log the losses to wandb
+                        if wandb_run is not None:
+                            try:
+                                wandb_run.log({
+                                    **{f"losses/{k}": v for k, v in parameters_update_log.items()},
+                                    "global_step": global_step,
+                                })
+                            except NameError:
+                                print(f"[Unable to log to wandb] Step {global_step}: actor/critic not updated yet")
 
                 # Increment the step counters
                 global_step += 1
@@ -457,3 +420,4 @@ class SACDiscrete(RLAgent):
 
             # Increment episode counter
             episode_i += 1
+

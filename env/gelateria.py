@@ -33,8 +33,7 @@ class GelateriaState:
     last_markdowns: Optional[Dict[str, float]] = None
     last_actions: Optional[Dict[str, List[float]]] = None
     historical_sales: Optional[Dict[str, List[float]]] = None
-
-    historical_action_count: Optional[Dict[str, Dict[float, int]]] = None
+    original_stock: Optional[Dict[str, int]] = None
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
@@ -76,6 +75,7 @@ class GelateriaState:
 
     def __post_init__(self):
         self.max_stock = max([product.stock for product in self.products.values()])
+        self.original_stock = {product_id: product.stock for product_id, product in self.products.items()}
 
     def restock(self, restock_fct: Union[Callable[[Gelato], int], Dict[str, int]]):
         for product_id, product in self.products.items():
@@ -163,8 +163,14 @@ def default_init_state_new() -> GelateriaState:
 
     products = []
     current_markdowns = {}
+
+    count=0
     # Loop through the rows in the filtered DataFrame
     for index, row in df[df['calendar_date'] == last_date].iterrows():
+
+        # if row['flavour'] != 'Matcha Green Tea':
+        #     continue
+
         # Access the values of each column for the current row
         products_id = uuid.uuid4()
         flavour = Flavour(row['flavour'])
@@ -174,7 +180,7 @@ def default_init_state_new() -> GelateriaState:
         restock_possible = False
         products += [Gelato(flavour=flavour, base_price=base_price, stock=stock, id=products_id,
                             restock_possible=restock_possible)]
-
+        # break # TODO: test with only one product
     return GelateriaState(
         products={product.id: product for product in products},
         current_markdowns=current_markdowns,

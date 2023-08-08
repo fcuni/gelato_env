@@ -120,7 +120,9 @@ class BaseExperiment:
         from env.gelateria_env_v2 import GelateriaEnv_v2
         from env.gelateria import default_init_state_new
         from env.reward.simple_reward import SimpleReward
+        from env.reward.multi_objective_reward import MultiObjectiveReward
         from env.mask.simple_masks import BooleanMonotonicMarkdownsMask
+        from env.mask.phased_markdown_mask import PhasedMarkdownMask
         from env_wrapper.wrapper import DefaultGelatoEnvWrapper
 
         sales_model = GenericSalesPredictionModel(
@@ -131,10 +133,34 @@ class BaseExperiment:
         )
 
         env = GelateriaEnv_v2(init_state=default_init_state_new(), sales_model=sales_model, reward=SimpleReward(),
-                              mask_fn=BooleanMonotonicMarkdownsMask)
+                              mask_fn=PhasedMarkdownMask(BaseExperiment.get_markdown_schedule()))
 
         env_wrap = DefaultGelatoEnvWrapper(env)
         return env_wrap
+
+    @staticmethod
+    def get_markdown_schedule():
+        from collections import namedtuple
+        from datetime import datetime
+        import pandas as pd
+
+        Markdown_Schedule = namedtuple('Markdown_Schedule',
+                                       ['start_date', 'end_date', 'highest_markdown', 'lowest_markdown'])
+        markdown_schedule = [
+            Markdown_Schedule(datetime(2023, 7, 3), datetime(2023, 7, 9), 0.0, 0.2),
+            Markdown_Schedule(datetime(2023, 7, 10), datetime(2023, 7, 16), 0.0, 0.2),
+            Markdown_Schedule(datetime(2023, 7, 17), datetime(2023, 7, 23), 0.1, 0.3),
+            Markdown_Schedule(datetime(2023, 7, 24), datetime(2023, 7, 30), 0.1, 0.3),
+            Markdown_Schedule(datetime(2023, 7, 31), datetime(2023, 8, 6), 0.2, 0.5),
+            Markdown_Schedule(datetime(2023, 8, 7), datetime(2023, 8, 13), 0.2, 0.5),
+            Markdown_Schedule(datetime(2023, 8, 14), datetime(2023, 8, 20), 0.2, 0.7),
+            Markdown_Schedule(datetime(2023, 8, 21), datetime(2023, 8, 27), 0.4, 1.0),
+            Markdown_Schedule(datetime(2023, 8, 28), datetime(2023, 9, 4), 0.4, 1.0),
+            Markdown_Schedule(datetime(2023, 9, 5), datetime(2023, 9, 11), 0.4, 1.0)
+        ]
+
+        return pd.DataFrame(data=markdown_schedule,
+                            columns=['start_date', 'end_date', 'lowest_markdown', 'highest_markdown'])
 
     @abstractmethod
     def get_rl_model(self) -> RLAgent:

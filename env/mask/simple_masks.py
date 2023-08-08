@@ -43,7 +43,7 @@ class BooleanMonotonicMarkdownsMask(ActionMask):
                 mask[idx, :int(round(markdown * 100))] = 0
         else:
             mask = np.ones((state.shape[0], 101))
-            for idx, markdown in enumerate(state[:, 3]):
+            for idx, markdown in enumerate(state[:, 0]):
                 mask[idx, :int(round((markdown * 100).item()))] = 0
        
         return mask.squeeze().astype(output_dtype)
@@ -88,7 +88,7 @@ class OnlyCurrentActionBooleanMask(ActionMask):
                 mask[idx, int(round(markdown * 100))] = 1
         else:
             mask = np.zeros((state.shape[0], 101))
-            for idx, markdown in enumerate(state[:, 3]):
+            for idx, markdown in enumerate(state[:, 0]):
                 mask[idx, int(round((markdown * 100).item()))] = 1
 
         return mask.squeeze().astype(output_dtype)

@@ -62,10 +62,11 @@ class SalesGradientTrigger(BaseTrigger):
         # sales
 
     def check_sales_gradient(self, state: GelateriaState) -> bool:
-        pass
+        raise NotImplementedError
 
     def __call__(self, *args, **kwargs):
         # TODO: implement this
-        sales_gradient = kwargs["sales_gradient"]
-        return sales_gradient > 0.0
+        raise NotImplementedError
+        # sales_gradient = kwargs["sales_gradient"]
+        # return sales_gradient > 0.0
 
