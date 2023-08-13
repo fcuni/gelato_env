@@ -20,6 +20,12 @@ class RLAgent:
         else:
             self._run_name = run_name
 
+        # retrieve environment information
+        self._state_size: int = tuple(self._env.get_single_observation_space_size())[-1]
+        self._action_size: int = 1 if len(self._env.action_space.shape) == 0 else len(self._env.action_space.shape)
+        self._action_num: int = self._env.action_space.n
+        self._reward_size: int = 1
+
     @property
     def name(self):
         return self._name

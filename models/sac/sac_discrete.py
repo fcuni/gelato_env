@@ -23,7 +23,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 EnvType = Union[gym.Env, gym.core.Env]
-from env.mask.simple_masks import OnlyCurrentActionBooleanMask, BooleanMonotonicMarkdownsMask
 from models.base_rl_agent import RLAgent
 from models.sac.networks import ActorNetwork, SoftQNetwork
 from utils.buffer import ReplayBuffer_v2 as ReplayBuffer
@@ -50,8 +49,6 @@ class SACDiscrete(RLAgent):
             self._device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Assign additional attributes for SAC
-        self._state_size: int = tuple(self._env.get_single_observation_space_size())[-1]
-        self._action_size: int = self._env.action_space.n
         self._alpha: Optional[float] = None
         self._markdown_trigger_fn = self._config.markdown_trigger_fn
 
@@ -110,21 +107,6 @@ class SACDiscrete(RLAgent):
         self._qf1_target.eval()
         self._qf2_target.eval()
 
-    # def act(self, obs: Union[Dict[str, Any], TensorType], evaluation: bool = False) -> np.ndarray:
-    #     """Act based on the observation.
-    #
-    #     Args:
-    #         obs (Dict[str, Any]): Observation from the environment.
-    #         evaluation (bool, optional): Whether to act deterministically or stochastically. Defaults to False.
-    #
-    #     Returns:
-    #         np.ndarray: Action to take in the environment.
-    #     """
-    #     obs = obs.to(self._device)
-    #     if evaluation:
-    #         return self._actor.evaluate(obs, mask=self._env.mask_actions(obs))[0]
-    #     return self._actor.get_det_action(obs, mask=self._env.mask_actions(obs))  # TODO: check if we need to use stochastic action
-
     def select_action(self, obs: Union[Dict[str, Any], TensorType], evaluation: bool = False,
                       mask: Optional[TensorType] = None) -> np.ndarray:
         """Act based on the observation.
@@ -163,18 +145,18 @@ class SACDiscrete(RLAgent):
 
     def initialise_models(self):
         """Initialize the Actor and Critic networks."""
-        self._actor = ActorNetwork(self._state_size, self._action_size,
+        self._actor = ActorNetwork(self._state_size, self._action_num,
                                    hidden_layers=self._config.actor_network_hidden_layers).to(self._device)
-        self._qf1 = SoftQNetwork(self._state_size, self._action_size,
+        self._qf1 = SoftQNetwork(self._state_size, self._action_num,
                                  hidden_layers=self._config.critic_network_hidden_layers,
                                  seed=self._config.seed).to(self._device)
-        self._qf2 = SoftQNetwork(self._state_size, self._action_size,
+        self._qf2 = SoftQNetwork(self._state_size, self._action_num,
                                  hidden_layers=self._config.critic_network_hidden_layers,
                                  seed=self._config.seed + 1).to(self._device)
-        self._qf1_target = SoftQNetwork(self._state_size, self._action_size,
+        self._qf1_target = SoftQNetwork(self._state_size, self._action_num,
                                         hidden_layers=self._config.critic_network_hidden_layers).to(
             self._device)
-        self._qf2_target = SoftQNetwork(self._state_size, self._action_size,
+        self._qf2_target = SoftQNetwork(self._state_size, self._action_num,
                                         hidden_layers=self._config.critic_network_hidden_layers).to(
             self._device)
         self._qf1_target.load_state_dict(self._qf1.state_dict())
@@ -189,7 +171,7 @@ class SACDiscrete(RLAgent):
         # Set up optimiser for automatic entropy tuning
         if self._config.auto_entropy_tuning:
             self._target_entropy = - self._config.target_entropy_scale * torch.log(
-                1 / torch.tensor(self._action_size))
+                1 / torch.tensor(self._action_num))
             self._log_alpha = torch.zeros(1, requires_grad=True, device=self._device)
             self._alpha = self._log_alpha.exp().item()
             self._a_optimizer = optim.Adam([self._log_alpha], lr=self._config.learning_rate, eps=1e-4)
@@ -403,7 +385,8 @@ class SACDiscrete(RLAgent):
                         "episode_step": episode_step,
                         "episode": episode_i,
                         "global_step": global_step,
-                        "summary_plots": fig
+                        "summary_plots": fig,
+                        "total_revenue": logger.get_episode_summary()["total_revenue"]
                     }
                 else:
                     wandb_log = {
@@ -414,7 +397,8 @@ class SACDiscrete(RLAgent):
                         "cumulative_reward": cumulative_reward,
                         "episode_step": episode_step,
                         "episode": episode_i,
-                        "global_step": global_step
+                        "global_step": global_step,
+                        "total_revenue": logger.get_episode_summary()["total_revenue"]
                     }
                 wandb_run.log(wandb_log)
 

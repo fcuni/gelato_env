@@ -46,7 +46,7 @@ class ActorNetwork(BaseNetwork):
     def evaluate(self, state_obs, epsilon: float = 1e-6, mask: Optional[np.ndarray] = None) \
             -> Tuple[Sequence[float], torch.Tensor, torch.Tensor]:
 
-        logits = self.forward(state_obs)
+        logits = self.forward(state_obs.float())
         if mask is None:
             mask = np.ones(logits.shape, dtype=bool)
         if isinstance(mask, np.ndarray):

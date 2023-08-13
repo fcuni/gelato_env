@@ -37,6 +37,7 @@ class GelateriaState:
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
+    max_steps: int = 10
     is_terminal: bool = False
     # TODO: set the restock period back to 7 days
     restock_period: int = 366  # original: 7
@@ -87,26 +88,55 @@ class GelateriaState:
                     self.products[product_id].stock = restock_fct(product)
 
     def get_public_observations(self) -> torch.Tensor:
-        flavour_one_hot = Flavour.get_flavour_encoding()
-        n_flavours = len(Flavour.get_all_flavours())
+        """
+        Construct and return the public observations from the state.
+
+        Returns:
+            A tensor of shape (n_products, n_public_features) containing the public observations.
+        """
+
         public_obs_tensor = []
+
+        all_flavour_encoding = Flavour.get_flavour_encoding()
+        n_flavours = len(Flavour.get_all_flavours())
         for product_id, product in self.products.items():
-            flavour_encoding = flavour_one_hot[product.flavour.value]
-            public_obs_tensor.append(torch.hstack([torch.tensor(self.day_number / 365),
-                                                   torch.tensor(product.stock / self.max_stock),
-                                                   torch.tensor(product.base_price),
-                                                   torch.tensor(self.current_markdowns[product_id]),
-                                                   torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
-                                                                               n_flavours),
-                                                   ]).float())
-            # TODO: currently the testing of the new public obs is moved to gelateria_env_v2
-            # public_obs_tensor.append(torch.hstack([torch.tensor(self.step,
-            #                                        torch.tensor(product.stock),
-            #                                        torch.tensor(product.base_price),
-            #                                        torch.tensor(self.current_markdowns[product_id]),
-            #                                        torch.nn.functional.one_hot(torch.tensor(flavour_encoding),
-            #                                                                    n_flavours),
-            #                                        ]).float())
+            flavour_encoding = all_flavour_encoding[product.flavour.value]
+            current_markdown = torch.tensor(self.current_markdowns[product_id])
+            day_of_year = torch.tensor(self.current_date.timetuple().tm_yday) - 1  # the -1 is to make it 0-indexed
+            available_stock = torch.tensor(product.stock)
+            base_price = torch.tensor(product.base_price)
+            remaining_steps = torch.tensor(self.max_steps - self.step)
+            flavour_one_hot = torch.nn.functional.one_hot(torch.tensor(flavour_encoding), n_flavours)
+
+            # calculate log_avail_stock: log(normalised_stock + 1)
+            avail_stock = available_stock / self.max_stock
+
+            # calculate day_number_of_year_factor
+            day_of_year_factor = day_of_year / 365
+
+            # get the public observations for each product (different from the ones used in the sales model)
+            public_obs_tensor.append(torch.hstack(
+                [
+                    current_markdown,
+                    avail_stock,
+                    base_price,
+                    day_of_year_factor,
+                    remaining_steps / self.max_steps,
+                    # flavour_one_hot
+                ]
+            ).float())
+
+        # OLD VERSION
+        #     public_obs_tensor.append(torch.hstack(
+        #         [current_markdown,
+        #          day_of_year / 365,
+        #          available_stock / self.max_stock,
+        #          base_price,
+        #          # torch.log(last_sales/state.max_stock + 1),
+        #          remaining_steps / self.max_steps,
+        #          flavour_one_hot]).float())
+        # public_obs = torch.vstack(public_obs_tensor)
+
         return torch.vstack(public_obs_tensor)
 
     def get_product_labels(self):

@@ -24,7 +24,8 @@ from data_generators.sigmoid_generators import SigmoidGaussian
 from env.gelateria import GelateriaState, default_init_state, default_init_state_new
 from env.markdown_trigger.base_trigger import BaseTrigger
 from env.markdown_trigger.triggers import DelayTrigger, DefaultTrigger
-from env.mask.simple_masks import BooleanMonotonicMarkdownsMask, NoRestrictionBooleanMask
+from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
+from env.mask.simple_masks import IdentityBooleanMask
 from utils.misc import custom_collate_fn, get_root_dir
 
 ROOT_DIR = get_root_dir()
@@ -105,7 +106,7 @@ class TDZeroConfig(BaseConfig):
 
 
 @dataclass
-class SACConfig(BaseConfig):
+class SACConfig_Old(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
     n_episodes: int = 500 #1000
@@ -136,51 +137,86 @@ class SACConfig(BaseConfig):
     epsilon_greedy_epsilon_decay_rate: float = 0.99
 
 @dataclass
-class SACConfig_New_Env(BaseConfig):
+class SACConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
-    n_episodes: int = 2500 #1000
+    n_episodes: int = 20000 #1000
     gamma: float = 0.99
     tau: float = 0.89  #1.0 #target smoothing coefficient
-    learning_rate: float = 5e-4
+    learning_rate: float = 1e-5
     auto_entropy_tuning: bool = True
     alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
     buffer_size: int = 100000
-    batch_size: int = 64
-    target_network_frequency: int = 8000  # 8000  # how often to update the target network (in steps)
+    batch_size: int = 128
+    target_network_frequency: int = 5000  # 8000  # how often to update the target network (in steps)
     # replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer_new_env.pkl"  # if path is provided, no new experience buffer is generated
     # save_replay_buffer: bool = True
     target_entropy_scale: float = 0.89 #0.7#0.89
     markdown_penalty: float = 1.0
     waste_penalty: float = 0.0
     regenerate_buffer: bool = True
-    update_frequency: int = 100  # how often to update the actor & critic network (in steps)
+    update_frequency: int = 50  # how often to update the actor & critic network (in steps)
     warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
     markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
-    actor_network_hidden_layers: Optional[Sequence[int]] = (256,1024,256)#(128, 512, 512, 128) # (64,128, 128,64)
-    critic_network_hidden_layers: Optional[Sequence[int]] = (256,1024,256)#(128, 512, 512, 128)
+    actor_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128) # (64,128, 128,64)
+    critic_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128)
 
 
 @dataclass
 class DQNConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
-    n_episodes: int = 5000 #1000
+    n_episodes: int = 20000 #1000
     gamma: float = 0.99
-    tau: float = 0.89  #1.0 #target smoothing coefficient
-    learning_rate: float = 1e-4
+    tau: float = 1.0  #1.0 #target smoothing coefficient
+    learning_rate: float = 1e-5
     markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
     buffer_size: int = 100000
-    batch_size: int = 64
-    target_network_frequency: int = 5000  # 8000  # how often to update the target network (in steps)
-    train_frequency: int = 50
+    batch_size: int = 128
+    target_network_frequency: int = 7000  # 8000  # how often to update the target network (in steps)
+    train_frequency: int = 8
     # markdown_penalty: float = 1.0
     # waste_penalty: float = 0.0
     # update_frequency: int = 8  # how often to update the actor & critic network (in steps)
-    warmup_episodes: int = 100  # how many no-discount steps before taking actions from the policy network
+    warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
     markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
-    q_network_hidden_layers: Optional[Sequence[int]] = (256,1024,256)#(128, 512, 512, 128)  # (64,128, 128,64)
+    q_network_hidden_layers: Optional[Sequence[int]] = (64,256,64)#(128, 512, 512, 128)  # (64,128, 128,64)
+    epsilon_start: float = 1.0
+    epsilon_decay: float = 0.99
 
+@dataclass
+class MBPOConfig(BaseConfig):
+    num_networks: int = 7
+    num_elites: int = 5
+    pred_hidden_size: int = 200
+    use_decay: bool = True
+    replay_size: int = 10000
+    rollout_batch_size: int = 1000
+    model_retain_epochs: int = 1
+    max_path_length: int = 10
+
+    # training parameters
+    init_exploration_steps: int = 1000  # 5000,
+    num_epoch: int = 1000
+    epoch_length: int = 100
+    min_pool_size: int = 1000
+    model_train_freq: int = 250
+    real_ratio: float = 0.05
+    predict_model_batch_size: int = 256
+    predict_model_holdout_ratio: float = 0.2
+
+    train_every_n_steps: int = 1
+    max_train_repeat_per_step: int = 5
+    num_train_repeat: int = 1
+    policy_train_batch_size: int = 256
+
+    rollout_min_length: int = 1
+    rollout_max_length: int = 10
+    rollout_max_epoch: int = 150
+    rollout_min_epoch: int = 20
+
+    # GelateriaEnv_v2 parameters
+    days_per_step: int = 7
 
 @dataclass
 class WandbConfig(BaseConfig):
@@ -209,13 +245,17 @@ class TDZeroExperimentConfig(ExperimentConfig):
 
 @dataclass
 class SACExperimentConfig(ExperimentConfig):
-    # sac_config: SACConfig = field(default_factory=SACConfig)
-    sac_config: SACConfig_New_Env = field(default_factory=SACConfig_New_Env)
+    sac_config: SACConfig = field(default_factory=SACConfig)
 
 @dataclass
 class DQNExperimentConfig(ExperimentConfig):
     dqn_config: DQNConfig = field(default_factory=DQNConfig)
 
+@dataclass
+class MBPOExperimentConfig(ExperimentConfig):
+    mbpo_config: MBPOConfig = field(default_factory=MBPOConfig)
+    sac_config: SACConfig = field(default_factory=SACConfig)
+    dqn_config: DQNConfig = field(default_factory=DQNConfig)
 
 @dataclass
 class SupervisedExperimentConfig(ExperimentConfig):

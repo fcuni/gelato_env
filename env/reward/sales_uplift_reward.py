@@ -6,24 +6,6 @@ from env.gelateria import GelateriaState
 from env.reward.base_reward import BaseReward
 
 
-def get_reduced_price(state: GelateriaState) -> Dict[str, float]:
-    """Shorthand to compute the reduced price for the markdown products in the state."""
-    return {
-        product_id: product.base_price * (1 - state.current_markdowns[product_id])
-        for product_id, product in state.products.items()
-    }
-
-
-def get_sales_revenue(sales: Dict[str, float], state: GelateriaState):
-    """Shorthand to compute the sales revenue for the markdown products in the state."""
-    remaining_stock = {product_id: product.stock for product_id, product in state.products.items()}
-    reduced_prices = get_reduced_price(state)
-    sold_units = {product_id: min(remaining_stock[product_id], round(sales[product_id])) for product_id in
-                  state.products}
-    sales_revenue = {product_id: reduced_prices[product_id] * sold_units[product_id] for product_id in
-                     state.products}
-    return sales_revenue
-
 
 class SalesUpliftReward(BaseReward):
 
@@ -62,7 +44,7 @@ class SalesUpliftReward(BaseReward):
         """
         return {"rewards/markdown_penalty": self._markdown_penalty, "rewards/waste_penalty": self._waste_penalty}
 
-    def __call__(self, sales: Dict[str, float], state: GelateriaState,
+    def __call__(self, sales: Dict[str, int], state: GelateriaState,
                  previous_state: Optional[GelateriaState] = None) -> Dict[str, float]:
 
         if previous_state is None:
@@ -100,8 +82,3 @@ class SalesUpliftReward(BaseReward):
                   state.products}
 
         return reward
-
-    def get_terminal_penalty(self, state: GelateriaState) -> Dict[str, float]:
-        remaining_stock_penalty = {product_id: self._waste_penalty * product.stock
-                                   for product_id, product in state.products.items()}
-        return remaining_stock_penalty

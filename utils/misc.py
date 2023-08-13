@@ -1,9 +1,10 @@
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Sequence, Optional
 from pathlib import Path
 import os
 from typing import Optional
 import numpy as np
 import torch
+from gym.spaces import MultiBinary
 from torch.utils.data import random_split, DataLoader, TensorDataset
 from utils.types import TensorType
 
@@ -122,3 +123,34 @@ def split_dataset_to_train_valid_loaders(dataset: TensorDataset, train_fraction:
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=shuffle)
 
     return train_loader, valid_loader
+
+
+class OneHotEncoding(MultiBinary):
+    def __init__(self, n: Union[np.ndarray, Sequence[int], int],
+                 seed: Optional[Union[int, np.random.Generator]] = None):
+        assert isinstance(n, int), "n must be an int"
+        super().__init__(n=n, seed=seed)
+
+    def sample(self, mask: Optional[np.ndarray] = None) -> np.ndarray:
+        one_hot_arr = np.zeros(self.n, dtype=self.dtype)
+        index = self.np_random.integers(low=0, high=self.n, dtype=int)
+        one_hot_arr[index] = 1
+        return one_hot_arr
+
+    def contains(self, x) -> bool:
+        """Return boolean specifying if x is a valid member of this space."""
+        if isinstance(x, Sequence):
+            x = np.array(x)  # Promote list to array for contains check
+
+        return bool(
+            isinstance(x, np.ndarray)
+            and self.shape == x.shape
+            and np.all((x == 0) | (x == 1))
+            and np.sum(x) == 1
+        )
+
+    def __repr__(self):
+        return "OneHotEncoding(%d)" % self.n
+
+    def __eq__(self, other):
+        return self.n == other.n

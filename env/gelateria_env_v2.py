@@ -1,59 +1,26 @@
 from copy import deepcopy
 from datetime import timedelta
-from typing import List, Optional, Callable, Dict, Any, Union, Sequence, Tuple
+from typing import List, Optional, Callable, Dict, Any, Union, Sequence
 import logging
 
 import gym
-from gym.spaces import Box, Discrete, MultiBinary
+from gym.spaces import Box, Discrete
 # import gymnasium as gym
 import numpy as np
 from ray.rllib.utils import override
 import torch
 
 from env.gelateria import Gelato, GelateriaState
-from env.markdown_trigger.base_trigger import BaseTrigger
-from env.markdown_trigger.triggers import DefaultTrigger
 from env.reward.base_reward import BaseReward
 from env.mask.action_mask import ActionMask
-from env.mask.simple_masks import MonotonicMarkdownsMask
+from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsMask
 # from models.sales.dataset import transform_gym_inputs
 from utils.enums import Flavour
-from utils.misc import first_not_none
+from utils.misc import first_not_none, OneHotEncoding
 
 from env.mask.simple_masks import IdentityMask
 
 logger = logging.getLogger(name=__name__)
-
-
-class OneHotEncoding(MultiBinary):
-    def __init__(self, n: Union[np.ndarray, Sequence[int], int],
-                 seed: Optional[Union[int, np.random.Generator]] = None):
-        assert isinstance(n, int), "n must be an int"
-        super().__init__(n=n, seed=seed)
-
-    def sample(self, mask: Optional[np.ndarray] = None) -> np.ndarray:
-        one_hot_arr = np.zeros(self.n, dtype=self.dtype)
-        index = self.np_random.integers(low=0, high=self.n, dtype=int)
-        one_hot_arr[index] = 1
-        return one_hot_arr
-
-    def contains(self, x) -> bool:
-        """Return boolean specifying if x is a valid member of this space."""
-        if isinstance(x, Sequence):
-            x = np.array(x)  # Promote list to array for contains check
-
-        return bool(
-            isinstance(x, np.ndarray)
-            and self.shape == x.shape
-            and np.all((x == 0) | (x == 1))
-            and np.sum(x) == 1
-        )
-
-    def __repr__(self):
-        return "OneHotEncoding(%d)" % self.n
-
-    def __eq__(self, other):
-        return self.n == other.n
 
 
 class GelateriaEnv_v2(gym.Env):
@@ -158,11 +125,11 @@ class GelateriaEnv_v2(gym.Env):
         """
         self._state = state
 
-    def mask_actions(self, state: Union[GelateriaState, torch.Tensor] = None) -> np.ndarray:
+    def mask_actions(self, state: Union[GelateriaState, torch.Tensor] = None, **kwargs) -> np.ndarray:
         """Allow only increasing markdowns."""
         if state is None:
             state = self._state
-        return self._mask(state)
+        return self._mask(state, **kwargs)
 
     def _restock(self):
         """Restock the products in the environment."""
@@ -297,19 +264,7 @@ class GelateriaEnv_v2(gym.Env):
             base_price = torch.tensor(product.base_price)  # TODO: divide by max price
             last_sales = torch.tensor(0.0) if len(state.historical_sales[product_id]) == 0 else \
                 torch.tensor(state.historical_sales[product_id][-1])
-            remaining_steps = torch.tensor(self._max_steps - state.step)
             flavour_one_hot = torch.nn.functional.one_hot(torch.tensor(flavour_encoding), n_flavours)
-
-            # get the public observations for each product (different from the ones used in the sales model)
-            public_obs_tensor.append(torch.hstack(
-                [current_markdown,
-                 day_of_year / 365,
-                 available_stock / state.max_stock,
-                 base_price,
-                 # torch.log(last_sales/state.max_stock + 1),
-                 remaining_steps / self._max_steps,
-                 flavour_one_hot]).float())
-            public_obs = torch.vstack(public_obs_tensor)
 
             # get the observations for the sales model for each product
             sales_model_input_tensor.append(torch.hstack(
@@ -319,9 +274,7 @@ class GelateriaEnv_v2(gym.Env):
                  base_price,
                  last_sales,
                  flavour_one_hot]).float())
-            sales_model_input = torch.vstack(sales_model_input_tensor)
-
-            public_obs = sales_model_input  # TODO: test only
+        sales_model_input = torch.vstack(sales_model_input_tensor)
 
         sales, sales_info = self._sales_model.get_sales(sales_model_input, output_info=True)
         combined_sales_info = {
@@ -334,7 +287,7 @@ class GelateriaEnv_v2(gym.Env):
             else:
                 combined_sales_info[info_key] = info_val
 
-        return {"public_obs": public_obs, "private_obs": combined_sales_info}
+        return {"public_obs": self.state.get_public_observations(), "private_obs": combined_sales_info}
 
     def get_info(self):
         """Return the info of the environment."""
@@ -450,6 +403,15 @@ class GelateriaEnv_v2(gym.Env):
     #
     #     return sampled_state, sampled_observation
 
+    def load_state(self, state: GelateriaState):
+        """Load a state into the environment. This is only used for trajectory sampling.
+
+        Args:
+            state: The state to load into the environment.
+        """
+        self._state = deepcopy(state)
+        self._is_reset = False
+        self._global_step = 0
 
     @override(gym.Env)
     def reset(self):

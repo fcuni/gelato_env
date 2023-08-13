@@ -31,7 +31,7 @@ class DefaultGelatoEnvWrapper(gym.Wrapper):
         self._action_output_dtype = action_output_dtype
         self._output_as_tensor = output_as_tensor
 
-    def step(self, action: Union[List[int], List[float], np.ndarray, torch.Tensor]) -> \
+    def step(self, action: Union[List[int], List[float], TensorType]) -> \
             Tuple[TensorType, TensorType, bool, Union[Dict[str, Any]]]:
         # Step the environment
         state, reward, done, info = self.env.step(self._transform_action(action),

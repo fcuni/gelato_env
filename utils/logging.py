@@ -55,7 +55,8 @@ class EpisodeLogger:
                 self.sales_per_product[product_id].append(0)
 
             if "current_price" in info:
-                current_price = info["current_price"][product_id] if isinstance(info["current_price"], dict) else info["current_price"][i]
+                current_price = info["current_price"][product_id] if isinstance(info["current_price"], dict) else \
+                    info["current_price"][i]
                 if isinstance(current_price, torch.Tensor):
                     current_price = current_price.item()
                 self.current_price_per_product[product_id].append(current_price)
@@ -66,7 +67,8 @@ class EpisodeLogger:
                     self.revenue_per_product[product_id].append(0.0)
 
             if "base_sales" in info:
-                base_sales = info["base_sales"][product_id] if isinstance(info["base_sales"], dict) else info["base_sales"][i]
+                base_sales = info["base_sales"][product_id] if isinstance(info["base_sales"], dict) else \
+                    info["base_sales"][i]
                 if isinstance(base_sales, torch.Tensor):
                     base_sales = base_sales.item()
                 self.base_sales_per_product[product_id].append(base_sales)
@@ -74,7 +76,8 @@ class EpisodeLogger:
                 self.base_sales_per_product[product_id].append(0.0)
 
             if "sales_uplift" in info:
-                uplift = info["sales_uplift"][product_id] if isinstance(info["sales_uplift"], dict) else info["sales_uplift"][i]
+                uplift = info["sales_uplift"][product_id] if isinstance(info["sales_uplift"], dict) else \
+                    info["sales_uplift"][i]
                 if isinstance(uplift, torch.Tensor):
                     uplift = uplift.item()
                 self.uplift_per_product[product_id].append(uplift)
@@ -82,7 +85,9 @@ class EpisodeLogger:
                 self.uplift_per_product[product_id].append(1.0)
 
             if "sales_not_clipped" in info:
-                sales_not_clipped = info["sales_not_clipped"][product_id] if isinstance(info["sales_not_clipped"], dict) else info["sales_not_clipped"][i]
+                sales_not_clipped = info["sales_not_clipped"][product_id] if isinstance(info["sales_not_clipped"],
+                                                                                        dict) else \
+                    info["sales_not_clipped"][i]
                 if isinstance(sales_not_clipped, torch.Tensor):
                     sales_not_clipped = sales_not_clipped.item()
                 self.sales_not_clipped_per_product[product_id].append(sales_not_clipped)
@@ -90,14 +95,14 @@ class EpisodeLogger:
                 self.sales_not_clipped_per_product[product_id].append(0.0)
 
             if "current_markdowns" in info:
-                current_markdown = info["current_markdowns"][product_id] if isinstance(info["current_markdowns"], dict) else info["current_markdowns"][i]
+                current_markdown = info["current_markdowns"][product_id] if isinstance(info["current_markdowns"],
+                                                                                       dict) else \
+                    info["current_markdowns"][i]
                 if isinstance(current_markdown, torch.Tensor):
                     current_markdown = current_markdown.item()
                 self.current_markdowns_per_product[product_id].append(current_markdown)
 
         self.step += 1
-
-
 
     def save(self):
         """Save the logged information to a pickle file."""
@@ -183,12 +188,37 @@ class EpisodeLogger:
 
         return fig
 
+    def get_episode_summary(self, key_prefix: Optional[str] = None) -> Dict[str, Any]:
+        """Return the per-product summary as a dictionary."""
 
+        summary = {
+            "sales_by_product": {},
+            "base_sales_by_product": {},
+            "uplift_sales_by_product": {},
+            "revenue_by_product": {},
+            "remaining_stock_by_product": {},
 
+            "start_date": self.dates[0].strftime("%Y-%m-%d"), # date of init state (first date to take action)
+            "end_date": self.dates[-1].strftime("%Y-%m-%d"),  # date of final state (the resulting state of the final action)
+            "total_steps": self.step - 1  # number of steps taken
+        }
 
+        for i, product_id in enumerate(self.products):
+            summary["sales_by_product"][self.flavours[i]] = sum(self.sales_per_product[product_id])
+            summary["base_sales_by_product"][self.flavours[i]] = sum(self.base_sales_per_product[product_id])
+            summary["uplift_sales_by_product"][self.flavours[i]] = summary["sales_by_product"][self.flavours[i]] \
+                - summary["base_sales_by_product"][self.flavours[i]]  # the difference between total sales and base sales
+            summary["revenue_by_product"][self.flavours[i]] = sum(self.revenue_per_product[product_id])
+            summary["remaining_stock_by_product"][self.flavours[i]] = self.stock_per_product[product_id][-1]
 
+        summary["total_sales"] = sum(summary["sales_by_product"].values())
+        summary["total_base_sales"] = sum(summary["base_sales_by_product"].values())
+        summary["total_uplift_sales"] = sum(summary["uplift_sales_by_product"].values())
+        summary["total_revenue"] = sum(summary["revenue_by_product"].values())
+        summary["total_remaining_stock"] = sum(summary["remaining_stock_by_product"].values())
 
+        # add the prefix to the keys if specified
+        if key_prefix is not None:
+            summary = {f"{key_prefix}{key}": value for key, value in summary.items()}
 
-
-
-
+        return summary

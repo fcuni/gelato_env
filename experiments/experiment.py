@@ -121,7 +121,7 @@ class BaseExperiment:
         from env.gelateria import default_init_state_new
         from env.reward.simple_reward import SimpleReward
         from env.reward.multi_objective_reward import MultiObjectiveReward
-        from env.mask.simple_masks import BooleanMonotonicMarkdownsMask
+        from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
         from env.mask.phased_markdown_mask import PhasedMarkdownMask
         from env_wrapper.wrapper import DefaultGelatoEnvWrapper
 
@@ -132,7 +132,7 @@ class BaseExperiment:
             base_sales_input_transform_fn=transform_gym_inputs
         )
 
-        env = GelateriaEnv_v2(init_state=default_init_state_new(), sales_model=sales_model, reward=SimpleReward(),
+        env = GelateriaEnv_v2(init_state=default_init_state_new(), sales_model=sales_model, reward=MultiObjectiveReward(),
                               mask_fn=PhasedMarkdownMask(BaseExperiment.get_markdown_schedule()))
 
         env_wrap = DefaultGelatoEnvWrapper(env)
