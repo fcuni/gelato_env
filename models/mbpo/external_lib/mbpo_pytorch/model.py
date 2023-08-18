@@ -1,6 +1,12 @@
+from typing import Optional
+
 import torch
 
-# torch.set_default_tensor_type(torch.cuda.FloatTensor)
+if torch.cuda.is_available():
+    device = torch.device('cuda:0')
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+else:
+    device = torch.device('cpu')
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -8,8 +14,6 @@ import numpy as np
 import math
 import gzip
 import itertools
-
-device = torch.device('cpu')
 
 num_train = 60000  # 60k train examples
 num_test = 10000  # 10k test examples
@@ -83,7 +87,8 @@ class EnsembleFC(nn.Module):
     ensemble_size: int
     weight: torch.Tensor
 
-    def __init__(self, in_features: int, out_features: int, ensemble_size: int, weight_decay: float = 0., bias: bool = True) -> None:
+    def __init__(self, in_features: int, out_features: int, ensemble_size: int, weight_decay: float = 0.,
+                 bias: bool = True) -> None:
         super(EnsembleFC, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -111,7 +116,8 @@ class EnsembleFC(nn.Module):
 
 
 class EnsembleModel(nn.Module):
-    def __init__(self, state_size, action_size, reward_size, ensemble_size, hidden_size=200, learning_rate=1e-3, use_decay=False):
+    def __init__(self, state_size, action_size, reward_size, ensemble_size, hidden_size=200, learning_rate=1e-3,
+                 use_decay=False):
         super(EnsembleModel, self).__init__()
         self.hidden_size = hidden_size
         self.nn1 = EnsembleFC(state_size + action_size, hidden_size, ensemble_size, weight_decay=0.000025)

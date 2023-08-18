@@ -1,27 +1,25 @@
 from copy import deepcopy
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import List, Optional, Callable, Dict, Any, Union, Sequence
 import logging
 
 import gym
 from gym.spaces import Box, Discrete
-# import gymnasium as gym
+import torch
 import numpy as np
 from ray.rllib.utils import override
-import torch
+
 
 from env.gelateria import Gelato, GelateriaState
 from env.reward.base_reward import BaseReward
 from env.mask.action_mask import ActionMask
 from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsMask
-# from models.sales.dataset import transform_gym_inputs
+from env.mask.simple_masks import IdentityMask
 from utils.enums import Flavour
 from utils.misc import first_not_none, OneHotEncoding
 
-from env.mask.simple_masks import IdentityMask
 
 logger = logging.getLogger(name=__name__)
-
 
 class GelateriaEnv_v2(gym.Env):
 
@@ -31,9 +29,9 @@ class GelateriaEnv_v2(gym.Env):
                  reward: BaseReward,
                  mask_fn: Callable[[], ActionMask] = MonotonicMarkdownsMask,
                  restock_fct: Optional[Callable[[Gelato], int]] = None,
-                 # max_stock: Optional[int] = None,
-                 max_steps: int = 10,  # int(1e8)
                  days_per_step: int = 7,
+                 max_steps: Optional[int] = 10,  # either max_steps or end_day must be set
+                 end_date: Optional[datetime] = None,  # either max_steps or end_day must be set
                  obs_transform_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
                  ):
         """
@@ -63,6 +61,7 @@ class GelateriaEnv_v2(gym.Env):
         self._is_reset = False
         self._global_step = 0
         self._max_steps = max_steps
+        self._end_date = end_date
         self._days_per_step = days_per_step
         # self._obs_transform_fn = transform_gym_inputs if obs_transform_fn is not None else lambda x: x
 
@@ -79,8 +78,7 @@ class GelateriaEnv_v2(gym.Env):
             'day_of_year': Box(low=0, high=1, dtype=np.float32),  # current day of the year / 365
             'available_stock': Box(low=0, high=1, dtype=np.float32),  # available stock divided by max stock
             'normalised_base_price': Box(low=0, high=1, dtype=np.float32),  # normalised
-            # 'last_sales': Box(low=0, high=np.inf, dtype=np.float32),
-            'remaining_steps': Box(low=0, high=self._max_steps, dtype=int),
+            'remaining_time': Box(low=0, high=1, dtype=np.float32),
             'flavour': OneHotEncoding(n=len(Flavour.get_all_flavours()))
         }
 
@@ -334,10 +332,13 @@ class GelateriaEnv_v2(gym.Env):
         self._update_internal(observations, prev_state=prev_state)
         observations['public_obs'] = self.get_observations(self._state)['public_obs']
 
-        if self._global_step >= self._max_steps:
+        if self._max_steps is not None and self._global_step >= self._max_steps:
             self._state.is_terminal = True
             logger.info(f"The episode has terminated after reaching the max number of "
                         f"steps.")
+        if self._end_date is not None and self.state.current_date >= self._end_date:
+            self._state.is_terminal = True
+            logger.info(f"The episode has terminated after reaching the end date.")
 
         info = {**(observations['private_obs']), **(self.get_info())}
 
@@ -347,61 +348,6 @@ class GelateriaEnv_v2(gym.Env):
         """Return the observation space size of a single agent. Public observations only."""
         assert self._state is not None
         return self.get_observations(self._state)['public_obs'].shape
-
-    # def sample(self, size: Optional[int] = None) -> np.ndarray:
-    #     """Sample observations from the environment.
-    #
-    #     Args:
-    #         size: The number of observations to sample. If None, a single observation is sampled.
-    #     """
-    #
-    #     def sample_one_obs():
-    #         sampled_obs = self.observation_space.sample()
-    #         # TODO: check if we want to keep 365 in config
-    #         day_of_year = np.clip(np.round(sampled_obs['day_of_year'] * 365), a_min=0, a_max=365) / 365
-    #         md = np.round(sampled_obs['current_markdowns'], 2)
-    #         # [RANDOM PRODUCT APPROACH]: sample a product from the flavour encoding index of each product available in
-    #         #   the Gelato shop
-    #         random_product = np.random.choice([Flavour.get_flavour_encoding()[self._state.products[
-    #             list(self._state.products.keys())[i]].flavour.value] for i in range(self._state.n_products)])
-    #         flavour = np.zeros(len(Flavour.get_all_flavours()), dtype=np.float32)
-    #         flavour[random_product] = 1.0
-    #         stock_level = sampled_obs['stock_level']
-    #         base_price = sampled_obs['base_price']
-    #         return np.concatenate([day_of_year, stock_level, base_price, md, flavour])
-    #
-    #     if size is None:
-    #         return sample_one_obs()
-    #     else:
-    #         return np.array([sample_one_obs() for _ in range(size)])
-    #
-    # def sample_from_current_store(self) -> Tuple[GelateriaState, np.ndarray]:
-    #     """Sample observations from the current store (based on the products in the store)
-    #
-    #     Returns:
-    #         sampled_state: A sampled state of the environment.
-    #         sampled_observation: The public observation of the sampled observation.
-    #     """
-    #     assert self._state is not None, "The environment must be reset before sampling from it."
-    #     current_obs = self._state.get_public_observations()
-    #     sampled_obs = self.sample(size=self._state.n_products)
-    #     day_of_year = (np.array([sampled_obs[0, 0]] * self._state.n_products)).reshape(-1, 1)
-    #     stock_level = (np.round(self._state.max_stock * sampled_obs[:, 1]) / self._state.max_stock).reshape(-1, 1)
-    #     base_price = current_obs[:, 2].reshape(-1, 1)
-    #     md = sampled_obs[:, 3].reshape(-1, 1)
-    #     flavour = current_obs[:, -len(Flavour.get_all_flavours()):]
-    #     sampled_observation = np.concatenate([day_of_year, stock_level, base_price, md, flavour], axis=1)
-    #
-    #     sampled_state = deepcopy(self._init_state)
-    #     sampled_state.day_number = round(day_of_year[0, 0] * 365)
-    #
-    #     for i, key in enumerate(sampled_state.products.keys()):
-    #         sampled_state.products[key].stock = round(stock_level[i, 0] * sampled_state.max_stock)
-    #         sampled_state.current_markdowns[key] = md[i, 0]
-    #         # sampled_state.last_markdowns[key] = md[i, 0]
-    #         # sampled_state.last_actions[key].append(md[i, 0])
-    #
-    #     return sampled_state, sampled_observation
 
     def load_state(self, state: GelateriaState):
         """Load a state into the environment. This is only used for trajectory sampling.

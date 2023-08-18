@@ -37,9 +37,9 @@ class GelateriaState:
     local_reward: Optional[Dict[str, float]] = None
     global_reward: float = 0.0
     step: int = 0
-    max_steps: int = 10
+    max_steps: Optional[int] = None  # either max_steps or end_date must be set
+    end_date: Optional[datetime] = None
     is_terminal: bool = False
-    # TODO: set the restock period back to 7 days
     restock_period: int = 366  # original: 7
 
 
@@ -77,6 +77,7 @@ class GelateriaState:
     def __post_init__(self):
         self.max_stock = max([product.stock for product in self.products.values()])
         self.original_stock = {product_id: product.stock for product_id, product in self.products.items()}
+        self.start_date = self.current_date
 
     def restock(self, restock_fct: Union[Callable[[Gelato], int], Dict[str, int]]):
         for product_id, product in self.products.items():
@@ -105,7 +106,18 @@ class GelateriaState:
             day_of_year = torch.tensor(self.current_date.timetuple().tm_yday) - 1  # the -1 is to make it 0-indexed
             available_stock = torch.tensor(product.stock)
             base_price = torch.tensor(product.base_price)
-            remaining_steps = torch.tensor(self.max_steps - self.step)
+
+            # calculate remaining time
+            remaining_time = torch.tensor(0.0)
+            if self.end_date is not None:
+                remaining_days = torch.tensor((self.end_date - self.current_date).days)
+                total_days = torch.tensor((self.end_date - self.start_date).days)
+                remaining_time = remaining_days / total_days
+            if self.max_steps is not None:
+                remaining_steps = torch.tensor(self.max_steps - self.step)
+                total_steps = torch.tensor(self.max_steps)
+                remaining_time = torch.max(remaining_time, remaining_steps / total_steps)
+
             flavour_one_hot = torch.nn.functional.one_hot(torch.tensor(flavour_encoding), n_flavours)
 
             # calculate log_avail_stock: log(normalised_stock + 1)
@@ -121,21 +133,10 @@ class GelateriaState:
                     avail_stock,
                     base_price,
                     day_of_year_factor,
-                    remaining_steps / self.max_steps,
+                    remaining_time,
                     # flavour_one_hot
                 ]
             ).float())
-
-        # OLD VERSION
-        #     public_obs_tensor.append(torch.hstack(
-        #         [current_markdown,
-        #          day_of_year / 365,
-        #          available_stock / self.max_stock,
-        #          base_price,
-        #          # torch.log(last_sales/state.max_stock + 1),
-        #          remaining_steps / self.max_steps,
-        #          flavour_one_hot]).float())
-        # public_obs = torch.vstack(public_obs_tensor)
 
         return torch.vstack(public_obs_tensor)
 

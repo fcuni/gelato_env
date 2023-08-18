@@ -1,18 +1,11 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, TypeVar, Union
 
 import numpy as np
+import pandas as pd
+
 import torch
 from pytorch_lightning.accelerators import Accelerator
 from pytorch_lightning.callbacks import Callback
@@ -21,17 +14,32 @@ from torch.utils.data import Sampler
 from data_generators.gaussian_generators import StrongSeasonalGaussian
 from data_generators.generator import Generator
 from data_generators.sigmoid_generators import SigmoidGaussian
-from env.gelateria import GelateriaState, default_init_state, default_init_state_new
 from env.markdown_trigger.base_trigger import BaseTrigger
 from env.markdown_trigger.triggers import DelayTrigger, DefaultTrigger
-from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
-from env.mask.simple_masks import IdentityBooleanMask
+from env.mask.phased_markdown_mask import PhasedMarkdownMask
+from env.reward.multi_objective_reward import MultiObjectiveReward
 from utils.misc import custom_collate_fn, get_root_dir
 
 ROOT_DIR = get_root_dir()
 
 T_co = TypeVar("T_co", covariant=True)
 T = TypeVar("T")
+
+
+def get_markdown_schedule(path: str = "markdown_schedule.csv"):
+    """
+    Load the markdown schedule and returns it as a pandas DataFrame.
+
+    Args:
+        path: path to the markdown schedule csv file.
+
+    Returns:
+        markdown schedule as a pandas DataFrame.
+    """
+    schedule_df = pd.read_csv(path)
+    schedule_df['start_date'] = pd.to_datetime(schedule_df['start_date'])
+    schedule_df['end_date'] = pd.to_datetime(schedule_df['end_date'])
+    return schedule_df
 
 
 @dataclass
@@ -186,21 +194,20 @@ class DQNConfig(BaseConfig):
 
 @dataclass
 class MBPOConfig(BaseConfig):
-    num_networks: int = 7
-    num_elites: int = 5
+    num_networks: int = 4
+    num_elites: int = 2
     pred_hidden_size: int = 200
     use_decay: bool = True
     replay_size: int = 10000
-    rollout_batch_size: int = 1000
+    rollout_batch_size: int = 400#1000
     model_retain_epochs: int = 1
     max_path_length: int = 10
-
     # training parameters
     init_exploration_steps: int = 1000  # 5000,
-    num_epoch: int = 1000
-    epoch_length: int = 100
+    num_epoch: int = 200
+    epoch_length: int = 100#80 #1000
     min_pool_size: int = 1000
-    model_train_freq: int = 250
+    model_train_freq: int = 25#20 #250
     real_ratio: float = 0.05
     predict_model_batch_size: int = 256
     predict_model_holdout_ratio: float = 0.2
@@ -212,8 +219,8 @@ class MBPOConfig(BaseConfig):
 
     rollout_min_length: int = 1
     rollout_max_length: int = 10
-    rollout_max_epoch: int = 150
-    rollout_min_epoch: int = 20
+    rollout_max_epoch: int = 80 #150
+    rollout_min_epoch: int = 15#20
 
     # GelateriaEnv_v2 parameters
     days_per_step: int = 7
@@ -227,7 +234,18 @@ class WandbConfig(BaseConfig):
 
 
 @dataclass
+class EnvConfig(BaseConfig):
+    action_mask_fn: Optional[Callable] = PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
+    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.5)
+    restock_fn: Optional[Callable] = None
+    days_per_step: int = 7
+    end_date: Optional[datetime] = datetime(2023, 10, 9)
+    max_steps: Optional[int] = None
+
+
+@dataclass
 class ExperimentConfig(BaseConfig):
+    env_config: EnvConfig = field(default_factory=EnvConfig)
     net_config: NetConfig = field(default_factory=NetConfig)
     data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
     dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)

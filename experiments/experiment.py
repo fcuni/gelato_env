@@ -1,8 +1,11 @@
+import uuid
 from abc import abstractmethod
 import random
 from typing import Callable, Optional, Dict, Any
 
 import numpy as np
+import pandas as pd
+
 import torch
 import torch.nn as nn
 
@@ -12,12 +15,13 @@ import wandb
 from wandb.wandb_run import Run
 
 from data_generators.data_generators import DataGenerator
-from env.gelateria import GelateriaState
+from env.gelateria import GelateriaState, Gelato
 from env.gelateria_env import GelateriaEnv
 from env.mask.action_mask import ActionMask
 from env.reward.base_reward import BaseReward
 from models.base_rl_agent import RLAgent
-from utils.config import WandbConfig, ExperimentConfig
+from utils.config import WandbConfig, ExperimentConfig, EnvConfig
+from utils.enums import Flavour
 
 
 class BaseExperiment:
@@ -112,17 +116,12 @@ class BaseExperiment:
         return env
 
     @staticmethod
-    def build_env_v2():
+    def build_env_v2(config: EnvConfig):
         from models.sales.sales_prediction_models import GenericSalesPredictionModel
         from models.sales.base_sales_models import CombinedMLPLogBaseSalesModel
         from models.sales.sales_uplift_models import GammaSalesUpliftModel
         from models.sales.dataset import transform_gym_inputs
         from env.gelateria_env_v2 import GelateriaEnv_v2
-        from env.gelateria import default_init_state_new
-        from env.reward.simple_reward import SimpleReward
-        from env.reward.multi_objective_reward import MultiObjectiveReward
-        from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
-        from env.mask.phased_markdown_mask import PhasedMarkdownMask
         from env_wrapper.wrapper import DefaultGelatoEnvWrapper
 
         sales_model = GenericSalesPredictionModel(
@@ -132,35 +131,56 @@ class BaseExperiment:
             base_sales_input_transform_fn=transform_gym_inputs
         )
 
-        env = GelateriaEnv_v2(init_state=default_init_state_new(), sales_model=sales_model, reward=MultiObjectiveReward(),
-                              mask_fn=PhasedMarkdownMask(BaseExperiment.get_markdown_schedule()))
+        env = GelateriaEnv_v2(init_state=BaseExperiment._get_experiment_init_state(),
+                              sales_model=sales_model,
+                              reward=config.reward_fn,
+                              mask_fn=config.action_mask_fn,
+                              days_per_step=config.days_per_step,
+                              end_date=config.end_date,
+                              max_steps=config.max_steps,
+                              restock_fct=config.restock_fn)
 
         env_wrap = DefaultGelatoEnvWrapper(env)
         return env_wrap
 
     @staticmethod
-    def get_markdown_schedule():
-        from collections import namedtuple
-        from datetime import datetime
-        import pandas as pd
+    def _get_experiment_init_state() -> GelateriaState:
 
-        Markdown_Schedule = namedtuple('Markdown_Schedule',
-                                       ['start_date', 'end_date', 'highest_markdown', 'lowest_markdown'])
-        markdown_schedule = [
-            Markdown_Schedule(datetime(2023, 7, 3), datetime(2023, 7, 9), 0.0, 0.2),
-            Markdown_Schedule(datetime(2023, 7, 10), datetime(2023, 7, 16), 0.0, 0.2),
-            Markdown_Schedule(datetime(2023, 7, 17), datetime(2023, 7, 23), 0.1, 0.3),
-            Markdown_Schedule(datetime(2023, 7, 24), datetime(2023, 7, 30), 0.1, 0.3),
-            Markdown_Schedule(datetime(2023, 7, 31), datetime(2023, 8, 6), 0.2, 0.5),
-            Markdown_Schedule(datetime(2023, 8, 7), datetime(2023, 8, 13), 0.2, 0.5),
-            Markdown_Schedule(datetime(2023, 8, 14), datetime(2023, 8, 20), 0.2, 0.7),
-            Markdown_Schedule(datetime(2023, 8, 21), datetime(2023, 8, 27), 0.4, 1.0),
-            Markdown_Schedule(datetime(2023, 8, 28), datetime(2023, 9, 4), 0.4, 1.0),
-            Markdown_Schedule(datetime(2023, 9, 5), datetime(2023, 9, 11), 0.4, 1.0)
-        ]
+        # load the masked dataset
+        df = pd.read_csv("masked_dataset.csv")
+        # sort the dataset by date
+        df['calendar_date'] = pd.to_datetime(df['calendar_date'])
+        df.sort_values(by='calendar_date', inplace=True)
+        # query the last date in the dataset
+        last_date = df['calendar_date'].max()
 
-        return pd.DataFrame(data=markdown_schedule,
-                            columns=['start_date', 'end_date', 'lowest_markdown', 'highest_markdown'])
+        products = []
+        current_markdowns = {}
+
+        count = 0
+        # Loop through the rows in the filtered DataFrame
+        for index, row in df[df['calendar_date'] == last_date].iterrows():
+
+            # Access the values of each column for the current row
+            products_id = uuid.uuid4()
+            flavour = Flavour(row['flavour'])
+            base_price = float(row['full_price_masked'])
+            stock = int(row['stock'])
+            current_markdowns[products_id] = row['markdown']
+            restock_possible = False
+            products += [Gelato(flavour=flavour, base_price=base_price, stock=stock, id=products_id,
+                                restock_possible=restock_possible)]
+            # break # TODO: test with only one product
+        return GelateriaState(
+            products={product.id: product for product in products},
+            current_markdowns=current_markdowns,
+            last_markdowns={product.id: None for product in products},
+            last_actions={product.id: [] for product in products},
+            local_reward={product.id: None for product in products},
+            historical_sales={product.id: [] for product in products},
+            current_date=last_date,
+            end_date=datetime(2023, 10, 9)
+        )
 
     @abstractmethod
     def get_rl_model(self) -> RLAgent:

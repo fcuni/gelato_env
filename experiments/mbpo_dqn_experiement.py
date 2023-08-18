@@ -14,7 +14,7 @@ class MbpoDqnExperiment(BaseExperiment):
     def __init__(self):
         super().__init__(name="MbpoDqnExperiment", config=get_experiment_config())
         self._config: MBPOExperimentConfig = get_experiment_config()
-        self._env = self.build_env_v2()
+        self._env = self.build_env_v2(self._config.env_config)
 
     def get_agent(self) -> RLAgent:
         agent = DQN(env=self._env, config=self._config.dqn_config)

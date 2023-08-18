@@ -66,7 +66,7 @@ class MultiObjectiveReward(BaseReward):
         pr_reward_dict = self._pr_reward(sales, state, previous_state)
 
         reward = {}
-        info = {"sell_through": [], "price_realisation":[]}
+        info = {"sell_through": [], "price_realisation": []}
 
         for product_id in state.products:
             reward[product_id] = self._sell_through_coeff * sales_through_reward_dict[product_id] \

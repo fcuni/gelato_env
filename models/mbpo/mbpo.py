@@ -1,4 +1,5 @@
 from collections import deque
+from datetime import timedelta
 from itertools import count
 from typing import Deque, Optional, Dict, Any, Union
 
@@ -30,41 +31,6 @@ class MBPO(RLAgent):
 
         super().__init__(env, f"{name}-{agent.name}", run_name=run_name)
         self._config: MBPOConfig = config
-        # self._config = {
-        #     'seed': 42,
-        #     'num_networks': 7,
-        #     'num_elites': 5,
-        #     'reward_size': 1,
-        #     'pred_hidden_size': 200,
-        #     'use_decay': True,
-        #     'replay_size': 10000,
-        #     'rollout_batch_size': 1000,
-        #     'model_retain_epochs': 1,
-        #     'max_path_length': 10,
-        #
-        #     # training parameters
-        #     'init_exploration_steps': 100,  # 5000,
-        #     'num_epoch': 1000,
-        #     'epoch_length': 100,
-        #     'min_pool_size': 1000,
-        #     'model_train_freq': 250,
-        #     'real_ratio': 0.05,
-        #     'predict_model_batch_size': 256,
-        #     'predict_model_holdout_ratio': 0.2,
-        #
-        #     'train_every_n_steps': 1,
-        #     'max_train_repeat_per_step': 5,
-        #     'num_train_repeat': 1,
-        #     'policy_train_batch_size': 256,
-        #
-        #     'rollout_min_length': 1,
-        #     'rollout_max_length': 10,
-        #     'rollout_max_epoch': 150,
-        #     'rollout_min_epoch': 20,
-        #
-        #     # GelateriaEnv_v2 parameters
-        #     'days_per_step': 7,
-        # }
 
         assert isinstance(self._env.action_space, gym.spaces.Discrete), "only discrete action space is supported"
         if device is None:
@@ -101,17 +67,30 @@ class MBPO(RLAgent):
     def configs(self) -> Dict[str, Any]:
         """Return the configurations of the agent."""
         return {
-            # "episodes": self._config.n_episodes,
-            # "buffer_size": self._config.buffer_size,
-            # "batch_size": self._config.batch_size,
-            # # "markdown_trigger_fn": self._markdown_trigger_fn.name,
-            # "dqn/warmup_episodes": self._config.warmup_episodes,
-            # "dqn/learning_rate": self._config.learning_rate,
-            # "dqn/gamma": self._config.gamma,
-            # "dqn/q_network/hidden_layers": self._config.q_network_hidden_layers,
-            # "dqn/train_frequency": self._config.train_frequency,
-            # "dqn/target_network_frequency": self._config.target_network_frequency,
-            # "dqn/tau": self._config.tau
+            "episodes": self._config.num_epoch,
+            "buffer_size": self._config.replay_size,
+            "mbpo/num_networks": self._config.num_networks,
+            "mbpo/num_elites": self._config.num_elites,
+            "mbpo/pred_hidden_size": self._config.pred_hidden_size,
+            "mbpo/use_decay": self._config.use_decay,
+            "mbpo/rollout_batch_size": self._config.rollout_batch_size,
+            "mbpo/model_retain_epochs": self._config.model_retain_epochs,
+            "mbpo/max_path_length": self._config.max_path_length,
+            "mbpo/init_exploration_steps": self._config.init_exploration_steps,
+            "mbpo/epoch_length": self._config.epoch_length,
+            "mbpo/min_pool_size": self._config.min_pool_size,
+            "mbpo/model_train_freq": self._config.model_train_freq,
+            "mbpo/real_ratio": self._config.real_ratio,
+            "mbpo/predict_model_batch_size": self._config.predict_model_batch_size,
+            "mbpo/predict_model_holdout_ratio": self._config.predict_model_holdout_ratio,
+            "mbpo/train_every_n_steps": self._config.train_every_n_steps,
+            "mbpo/max_train_repeat_per_step": self._config.max_train_repeat_per_step,
+            "mbpo/num_train_repeat": self._config.num_train_repeat,
+            "mbpo/policy_train_batch_size": self._config.policy_train_batch_size,
+            "mbpo/rollout_min_length": self._config.rollout_min_length,
+            "mbpo/rollout_max_length": self._config.rollout_max_length,
+            "mbpo/rollout_max_epoch": self._config.rollout_max_epoch,
+            "mbpo/rollout_min_epoch": self._config.rollout_min_epoch
         }
 
     def save(self):
@@ -150,7 +129,7 @@ class MBPO(RLAgent):
             action_mask = self._env.mask_actions(state=torch.from_numpy(state), current_dates=current_date)
 
             # Get a batch of actions
-            action = self._agent.select_action(torch.from_numpy(state), mask=action_mask)
+            action = self._agent.select_action(torch.from_numpy(state).float().to(self._device), mask=action_mask)
             next_states, rewards, terminals, info = self._predict_env.step(state, action[:, None])
 
             # GelateriaEnv-specific code
@@ -264,6 +243,7 @@ class MBPO(RLAgent):
                     train_policy_steps += self.train_policy_repeats(total_step, train_policy_steps, cur_step)
 
                 total_step += 1
+                # cur_step += train_policy_steps
 
                 if total_step % self._config.epoch_length == 0:
                     '''
