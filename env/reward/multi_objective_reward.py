@@ -11,22 +11,27 @@ class MultiObjectiveReward(BaseReward):
     """Multi-objective reward function that combines sell through and price realisation rewards, as well as,
     the empty shelf penalty. It gives a scalar reward that is the weighted sum of the three rewards.
 
-    Reward = price_realisation + sell_through_coeff * sell_through + empty_shelf_penalty_coeff * empty_shelf_penalty
+    Reward =    (1 - sell_through_coeff) * price_realisation + sell_through_coeff * sell_through +
+                empty_shelf_penalty_coeff * empty_shelf_penalty
     """
 
-    def __init__(self, sell_through_coeff: float = 1.0,
+    def __init__(self, sell_through_coeff: float = 0.5,
                  empty_shelf_penalty_coeff: Optional[float] = 0.0,
                  empty_shelf_penalty: Optional[float] = 1.0):
         """
         Args:
-            sell_through_coeff: coefficient for sell-through reward
+            sell_through_coeff: coefficient for sell-through reward  (between 0 and 1)
             empty_shelf_penalty_coeff: coefficient for empty shelf penalty
             empty_shelf_penalty: penalty for empty shelf (should be negative value)
         """
 
-        super().__init__(name="MultiObjectiveReward")
+        price_realisation_coeff: float = 1.0 - sell_through_coeff
+
+        super().__init__(name=f"MultiObjectiveReward(sell_through_coeff={sell_through_coeff}, " + \
+                              f"price_realisation_coeff={price_realisation_coeff}")
 
         self._sell_through_coeff = sell_through_coeff
+        self._price_realisation_coeff = price_realisation_coeff
         self._empty_shelf_penalty_coeff = empty_shelf_penalty_coeff
 
         self._sell_through_reward = SellThroughReward()
@@ -66,18 +71,19 @@ class MultiObjectiveReward(BaseReward):
         pr_reward_dict = self._pr_reward(sales, state, previous_state)
 
         reward = {}
-        info = {"sell_through": [], "price_realisation": []}
+        info = {"rewards/sell_through": [], "rewards/price_realisation": []}
 
         for product_id in state.products:
-            reward[product_id] = self._sell_through_coeff * sales_through_reward_dict[product_id] \
-                                 + pr_reward_dict[product_id]
-            info["sell_through"].append(sales_through_reward_dict[product_id])
-            info["price_realisation"].append(pr_reward_dict[product_id])
+            reward[product_id] = (self._sell_through_coeff * sales_through_reward_dict[product_id] +
+                                  self._price_realisation_coeff * pr_reward_dict[product_id]) / state.n_products
+            info["rewards/sell_through"].append(sales_through_reward_dict[product_id])
+            info["rewards/price_realisation"].append(pr_reward_dict[product_id])
 
         if self._empty_shelf_penalty_coeff != 0.0:
             empty_shelf_penalty_dict = self._empty_shelf_penalty(sales, state, previous_state)
-            info["empty_shelf_penalty"] = []
+            info["rewards/empty_shelf_penalty"] = []
             for product_id in state.products:
-                reward[product_id] += self._empty_shelf_penalty_coeff * empty_shelf_penalty_dict[product_id]
-                info["empty_shelf_penalty"].append(empty_shelf_penalty_dict[product_id])
+                reward[product_id] += (self._empty_shelf_penalty_coeff * empty_shelf_penalty_dict[product_id]) \
+                                      / state.n_products
+                info["rewards/empty_shelf_penalty"].append(empty_shelf_penalty_dict[product_id])
         return reward

@@ -19,6 +19,7 @@ class EpisodeLogger:
         self.current_price_per_product: Dict[str, List[float]] = defaultdict(list)
         self.current_markdowns_per_product: Dict[str, List[float]] = defaultdict(list)
         self.sales_not_clipped_per_product: Dict[str, List[float]] = defaultdict(list)
+        self.rewards_breakdown_per_product: Dict[str, Dict[str, List[float]]] = defaultdict(list)
         self.dates: List[datetime] = []
         self.products: List[str] = []
         self.flavours: List[str] = []
@@ -33,12 +34,6 @@ class EpisodeLogger:
             self.flavours = [info["flavours"][product_id] for product_id in info["products"]]
 
         for i, product_id in enumerate(info["products"]):
-
-            # if i == 0:
-            #     self.products.append(product_id)
-            #     if "flavours" in info:
-            #         flavour = info["flavours"][product_id] if isinstance(info["flavours"], dict) else info["flavours"][i]
-            #         self.flavours.append(flavour)
 
             if "stocks" in info:
                 stock = info["stocks"][product_id] if isinstance(info["stocks"], dict) else info["stocks"][i]
@@ -101,6 +96,16 @@ class EpisodeLogger:
                 if isinstance(current_markdown, torch.Tensor):
                     current_markdown = current_markdown.item()
                 self.current_markdowns_per_product[product_id].append(current_markdown)
+
+            for key, item in info.items():
+                if key.startswith("rewards/"):
+                    reward_type = key.replace("rewards/", "")
+                    reward_breakdown = info[key][product_id] if isinstance(info[key], dict) else info[key][i]
+                    if isinstance(reward_breakdown, torch.Tensor):
+                        reward_breakdown = reward_breakdown.item()
+                    if reward_type not in self.rewards_breakdown_per_product:
+                        self.rewards_breakdown_per_product[reward_type] = defaultdict(list)
+                    self.rewards_breakdown_per_product[reward_type][product_id].append(reward_breakdown)
 
         self.step += 1
 
@@ -197,6 +202,7 @@ class EpisodeLogger:
             "uplift_sales_by_product": {},
             "revenue_by_product": {},
             "remaining_stock_by_product": {},
+            "rewards_by_product": {k: {} for k, v in self.rewards_breakdown_per_product.items()},
 
             "start_date": self.dates[0].strftime("%Y-%m-%d"), # date of init state (first date to take action)
             "end_date": self.dates[-1].strftime("%Y-%m-%d"),  # date of final state (the resulting state of the final action)
@@ -211,11 +217,16 @@ class EpisodeLogger:
             summary["revenue_by_product"][self.flavours[i]] = sum(self.revenue_per_product[product_id])
             summary["remaining_stock_by_product"][self.flavours[i]] = self.stock_per_product[product_id][-1]
 
+            for k, v in self.rewards_breakdown_per_product.items():
+                summary["rewards_by_product"][k][self.flavours[i]] = \
+                    sum(self.rewards_breakdown_per_product[k][product_id])
+
         summary["total_sales"] = sum(summary["sales_by_product"].values())
         summary["total_base_sales"] = sum(summary["base_sales_by_product"].values())
         summary["total_uplift_sales"] = sum(summary["uplift_sales_by_product"].values())
         summary["total_revenue"] = sum(summary["revenue_by_product"].values())
         summary["total_remaining_stock"] = sum(summary["remaining_stock_by_product"].values())
+        summary["mean_product_reward_per_type"] = {k: sum(v.values())/len(self.products) for k, v in summary["rewards_by_product"]}
 
         # add the prefix to the keys if specified
         if key_prefix is not None:

@@ -62,7 +62,7 @@ class PhasedMarkdownMask(ActionMask):
                 upper_bounds = [markdown_restriction['highest_markdown'].iloc[0]] * state.n_products
 
             else:
-                print(f"Warning: No markdown restriction found for date {current_date}, no markdown action allowed")
+                # print(f"Warning: No markdown restriction found for date {current_date}, no markdown action allowed")
                 lower_bounds = [None] * state.n_products
                 upper_bounds = [None] * state.n_products
 
@@ -82,7 +82,7 @@ class PhasedMarkdownMask(ActionMask):
                     lower_bounds.append(lower_bound)
                     upper_bounds.append(upper_bound)
                 else:
-                    print(f"Warning: No markdown restriction found for date {date}, no markdown action allowed")
+                    # print(f"Warning: No markdown restriction found for date {date}, no markdown action allowed")
                     lower_bounds.append(None)
                     upper_bounds.append(None)
 

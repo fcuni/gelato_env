@@ -179,7 +179,8 @@ class BaseExperiment:
             local_reward={product.id: None for product in products},
             historical_sales={product.id: [] for product in products},
             current_date=last_date,
-            end_date=datetime(2023, 10, 9)
+            end_date=datetime(2023, 10, 9),
+            max_steps=None
         )
 
     @abstractmethod

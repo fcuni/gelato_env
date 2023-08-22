@@ -265,19 +265,6 @@ class SACDiscrete(RLAgent):
     def train(self, wandb_run: Optional[Run] = None):
         """Train the agent."""
 
-        # Load Replay Buffer from file / generate buffer
-        # TODO: temporarily disable
-        # if not self._config.regenerate_buffer:
-        #     self.replay_buffer.load(self._config.replay_buffer_path)
-        # if self._config.regenerate_buffer or len(self.replay_buffer) == 0:
-        #     # collect_random_v2(self._env, self.replay_buffer, self._config.initial_random_steps,
-        #     #                   state_transform_fn=get_flatten_observation_from_state)
-        #
-        #     collect_random_v3(self._env, self.replay_buffer, self._config.initial_random_steps)
-        #     # save buffer to file after regenerating buffer
-        #     if self._config.save_replay_buffer:
-        #         self.replay_buffer.save(self._config.replay_buffer_path)
-
         # Initialise variables
         global_step: int = 0
         episode_i: int = 0
@@ -376,6 +363,8 @@ class SACDiscrete(RLAgent):
                 if episode_i % 10 == 0 or episode_i == self._config.n_episodes - 1:
                     fig = logger.plot_episode_summary(title=f"Episode {episode_i}")
 
+                    episode_summary = logger.get_episode_summary()
+
                     wandb_log = {
                         "buffer_usage": len(self.replay_buffer),
                         "episode_reward": episode_reward,
@@ -386,7 +375,7 @@ class SACDiscrete(RLAgent):
                         "episode": episode_i,
                         "global_step": global_step,
                         "summary_plots": fig,
-                        "total_revenue": logger.get_episode_summary()["total_revenue"]
+                        "total_revenue": episode_summary["total_revenue"]
                     }
                 else:
                     wandb_log = {
@@ -398,7 +387,8 @@ class SACDiscrete(RLAgent):
                         "episode_step": episode_step,
                         "episode": episode_i,
                         "global_step": global_step,
-                        "total_revenue": logger.get_episode_summary()["total_revenue"]
+                        "total_revenue": episode_summary["total_revenue"],
+                        ** {f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
                     }
                 wandb_run.log(wandb_log)
 

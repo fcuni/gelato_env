@@ -278,6 +278,7 @@ class MBPO(RLAgent):
                     # Use wandb to record rewards per episode
                     if wandb_run is not None:
                         fig = logger.plot_episode_summary(title=f"Episode {epoch_step}")
+                        episode_summary = logger.get_episode_summary()
                         wandb_log = {
                             "env_buffer_usage": len(self._env_pool),
                             "model_buffer_usage": len(self._model_pool),
@@ -289,7 +290,8 @@ class MBPO(RLAgent):
                             "episode": epoch_step,
                             "global_step": total_step,
                             "summary_plots": fig,
-                            "total_revenue": logger.get_episode_summary()["total_revenue"]
+                            "total_revenue": episode_summary["total_revenue"],
+                            **{f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
                         }
 
                         wandb_run.log(wandb_log)

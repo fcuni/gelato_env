@@ -261,6 +261,7 @@ class DQN(RLAgent):
 
                 if episode_i % 10 == 0 or episode_i == self._config.n_episodes - 1:
                     fig = logger.plot_episode_summary(title=f"Episode {episode_i}")
+                    episode_summary = logger.get_episode_summary()
 
                     wandb_log = {
                         "buffer_usage": len(self.replay_buffer),
@@ -272,7 +273,8 @@ class DQN(RLAgent):
                         "episode": episode_i,
                         "global_step": global_step,
                         "summary_plots": fig,
-                        "total_revenue": logger.get_episode_summary()["total_revenue"]
+                        "total_revenue": episode_summary["total_revenue"]
+                        ** {f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
                     }
                 else:
                     wandb_log = {
@@ -284,7 +286,8 @@ class DQN(RLAgent):
                         "episode_step": episode_step,
                         "episode": episode_i,
                         "global_step": global_step,
-                        "total_revenue": logger.get_episode_summary()["total_revenue"]
+                        "total_revenue": episode_summary["total_revenue"]
+                        ** {f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
                     }
                 wandb_run.log(wandb_log)
 

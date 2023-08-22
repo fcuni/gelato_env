@@ -199,13 +199,13 @@ class MBPOConfig(BaseConfig):
     pred_hidden_size: int = 200
     use_decay: bool = True
     replay_size: int = 10000
-    rollout_batch_size: int = 400#1000
+    rollout_batch_size: int = 350#1000
     model_retain_epochs: int = 1
-    max_path_length: int = 10
+    max_path_length: int = 20
     # training parameters
     init_exploration_steps: int = 1000  # 5000,
-    num_epoch: int = 200
-    epoch_length: int = 100#80 #1000
+    num_epoch: int = 400
+    epoch_length: int = 80#80 #1000
     min_pool_size: int = 1000
     model_train_freq: int = 25#20 #250
     real_ratio: float = 0.05
@@ -218,9 +218,9 @@ class MBPOConfig(BaseConfig):
     policy_train_batch_size: int = 256
 
     rollout_min_length: int = 1
-    rollout_max_length: int = 10
+    rollout_max_length: int = 5
     rollout_max_epoch: int = 80 #150
-    rollout_min_epoch: int = 15#20
+    rollout_min_epoch: int = 15 #20
 
     # GelateriaEnv_v2 parameters
     days_per_step: int = 7
@@ -230,13 +230,13 @@ class WandbConfig(BaseConfig):
     use_wandb: bool = True
     project: str = "msc_project_v2"
     entity: str = "timc"
-    mode: str = "online"
+    mode: str = "offline"
 
 
 @dataclass
 class EnvConfig(BaseConfig):
     action_mask_fn: Optional[Callable] = PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
-    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.5)
+    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.2)
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
     end_date: Optional[datetime] = datetime(2023, 10, 9)
