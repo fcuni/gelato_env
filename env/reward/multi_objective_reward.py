@@ -25,13 +25,14 @@ class MultiObjectiveReward(BaseReward):
             empty_shelf_penalty: penalty for empty shelf (should be negative value)
         """
 
-        price_realisation_coeff: float = 1.0 - sell_through_coeff
-
-        super().__init__(name=f"MultiObjectiveReward(sell_through_coeff={sell_through_coeff}, " + \
-                              f"price_realisation_coeff={price_realisation_coeff}")
+        assert sell_through_coeff >= 0 and sell_through_coeff <= 1, \
+            f"sell_through_coeff should be between 0 and 1, got {sell_through_coeff}"
 
         self._sell_through_coeff = sell_through_coeff
-        self._price_realisation_coeff = price_realisation_coeff
+        self._pr_coeff = 1 - sell_through_coeff
+
+        super().__init__(name=f"MultiObjectiveReward(sell_through_coeff={self._sell_through_coeff})")
+
         self._empty_shelf_penalty_coeff = empty_shelf_penalty_coeff
 
         self._sell_through_reward = SellThroughReward()
@@ -71,19 +72,19 @@ class MultiObjectiveReward(BaseReward):
         pr_reward_dict = self._pr_reward(sales, state, previous_state)
 
         reward = {}
-        info = {"rewards/sell_through": [], "rewards/price_realisation": []}
+        info = {"rewards/sell_through": sales_through_reward_dict, "rewards/price_realisation": pr_reward_dict}
 
         for product_id in state.products:
             reward[product_id] = (self._sell_through_coeff * sales_through_reward_dict[product_id] +
-                                  self._price_realisation_coeff * pr_reward_dict[product_id]) / state.n_products
-            info["rewards/sell_through"].append(sales_through_reward_dict[product_id])
-            info["rewards/price_realisation"].append(pr_reward_dict[product_id])
+                                  self._pr_coeff * pr_reward_dict[product_id]) / state.n_products
 
         if self._empty_shelf_penalty_coeff != 0.0:
             empty_shelf_penalty_dict = self._empty_shelf_penalty(sales, state, previous_state)
-            info["rewards/empty_shelf_penalty"] = []
+            info["rewards/empty_shelf_penalty"] = empty_shelf_penalty_dict
             for product_id in state.products:
                 reward[product_id] += (self._empty_shelf_penalty_coeff * empty_shelf_penalty_dict[product_id]) \
                                       / state.n_products
-                info["rewards/empty_shelf_penalty"].append(empty_shelf_penalty_dict[product_id])
+
+        self._info = info
+
         return reward

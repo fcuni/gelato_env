@@ -226,7 +226,7 @@ class EpisodeLogger:
         summary["total_uplift_sales"] = sum(summary["uplift_sales_by_product"].values())
         summary["total_revenue"] = sum(summary["revenue_by_product"].values())
         summary["total_remaining_stock"] = sum(summary["remaining_stock_by_product"].values())
-        summary["mean_product_reward_per_type"] = {k: sum(v.values())/len(self.products) for k, v in summary["rewards_by_product"]}
+        summary["mean_product_reward_per_type"] = {k: sum(list(v.values()))/len(self.products) for k, v in summary["rewards_by_product"].items()}
 
         # add the prefix to the keys if specified
         if key_prefix is not None:

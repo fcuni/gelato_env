@@ -1,3 +1,3 @@
-from experiments.rl_experiment import RLExperiment
+from experiments.td_zero_experiment import RLExperiment
 
-RLExperiment().run()wa
+RLExperiment().run()

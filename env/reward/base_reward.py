@@ -8,6 +8,7 @@ class BaseReward:
 
     def __init__(self, name="BaseReward"):
         self._name: str = name
+        self._info: Dict[str, Any] = {}
 
     @property
     def name(self) -> str:
@@ -16,6 +17,10 @@ class BaseReward:
     @property
     def configs(self) -> Dict[str, Any]:
         return {}
+
+    @property
+    def info(self):
+        return self._info
 
     @abstractmethod
     def __call__(self, sales: Dict[str, int], state: GelateriaState,
@@ -37,6 +42,8 @@ class BaseReward:
             product_id: product.base_price
             for product_id, product in state.products.items()
         }
+
+
 
 
 

@@ -148,7 +148,7 @@ class SACConfig_Old(BaseConfig):
 class SACConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
-    n_episodes: int = 20000 #1000
+
     gamma: float = 0.99
     tau: float = 0.89  #1.0 #target smoothing coefficient
     learning_rate: float = 1e-5
@@ -157,40 +157,38 @@ class SACConfig(BaseConfig):
     buffer_size: int = 100000
     batch_size: int = 128
     target_network_frequency: int = 5000  # 8000  # how often to update the target network (in steps)
-    # replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer_new_env.pkl"  # if path is provided, no new experience buffer is generated
-    # save_replay_buffer: bool = True
     target_entropy_scale: float = 0.89 #0.7#0.89
-    markdown_penalty: float = 1.0
-    waste_penalty: float = 0.0
-    regenerate_buffer: bool = True
     update_frequency: int = 50  # how often to update the actor & critic network (in steps)
-    warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
-    markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
     actor_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128) # (64,128, 128,64)
     critic_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128)
+
+    init_exploration_steps: int = 1000
+    num_epoch: int = 1000#250
+    epoch_length:int = 100
+    min_pool_size: int = 1000
 
 
 @dataclass
 class DQNConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
-    n_episodes: int = 20000 #1000
+
     gamma: float = 0.99
-    tau: float = 1.0  #1.0 #target smoothing coefficient
+    tau: float = 1.0  # target smoothing coefficient
     learning_rate: float = 1e-5
-    markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
     buffer_size: int = 100000
     batch_size: int = 128
     target_network_frequency: int = 7000  # 8000  # how often to update the target network (in steps)
-    train_frequency: int = 8
-    # markdown_penalty: float = 1.0
-    # waste_penalty: float = 0.0
-    # update_frequency: int = 8  # how often to update the actor & critic network (in steps)
+    update_frequency: int = 8  # how often to update the q network (in steps)
     warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
-    markdown_trigger_fn: BaseTrigger = DefaultTrigger()  # The function to decide if a markdown should be triggered
-    q_network_hidden_layers: Optional[Sequence[int]] = (64,256,64)#(128, 512, 512, 128)  # (64,128, 128,64)
+    q_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
     epsilon_start: float = 1.0
     epsilon_decay: float = 0.99
+
+    init_exploration_steps: int = 1000
+    num_epoch: int = 1000
+    epoch_length: int = 100
+    min_pool_size: int = 1000
 
 @dataclass
 class MBPOConfig(BaseConfig):
@@ -199,13 +197,13 @@ class MBPOConfig(BaseConfig):
     pred_hidden_size: int = 200
     use_decay: bool = True
     replay_size: int = 10000
-    rollout_batch_size: int = 350#1000
+    rollout_batch_size: int = 400#1000
     model_retain_epochs: int = 1
-    max_path_length: int = 20
+    max_path_length: int = 10
     # training parameters
     init_exploration_steps: int = 1000  # 5000,
-    num_epoch: int = 400
-    epoch_length: int = 80#80 #1000
+    num_epoch: int = 250
+    epoch_length: int = 100#80 #1000
     min_pool_size: int = 1000
     model_train_freq: int = 25#20 #250
     real_ratio: float = 0.05
@@ -218,7 +216,7 @@ class MBPOConfig(BaseConfig):
     policy_train_batch_size: int = 256
 
     rollout_min_length: int = 1
-    rollout_max_length: int = 5
+    rollout_max_length: int = 10
     rollout_max_epoch: int = 80 #150
     rollout_min_epoch: int = 15 #20
 
@@ -228,9 +226,9 @@ class MBPOConfig(BaseConfig):
 @dataclass
 class WandbConfig(BaseConfig):
     use_wandb: bool = True
-    project: str = "msc_project_v2"
+    project: str = "msc_project_v4"
     entity: str = "timc"
-    mode: str = "offline"
+    mode: str = "online"
 
 
 @dataclass
@@ -246,9 +244,9 @@ class EnvConfig(BaseConfig):
 @dataclass
 class ExperimentConfig(BaseConfig):
     env_config: EnvConfig = field(default_factory=EnvConfig)
-    net_config: NetConfig = field(default_factory=NetConfig)
-    data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
-    dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
+    # net_config: NetConfig = field(default_factory=NetConfig)
+    # data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
+    # dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
     wandb_config: WandbConfig = field(default_factory=WandbConfig)
 
     # Set seeds & deterministic behaviour

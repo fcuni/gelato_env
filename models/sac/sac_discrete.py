@@ -10,8 +10,9 @@
 #   pages   = {1--18},
 #   url     = {http://jmlr.org/papers/v23/21-1342.html}
 # }
-
+import pickle
 from collections import deque
+from itertools import count
 from pathlib import Path
 from typing import Deque, Optional, Dict, Any, Union
 
@@ -37,7 +38,7 @@ class SACDiscrete(RLAgent):
 
     def __init__(self, env: EnvType,
                  config: SACConfig,
-                 name: str = "SAC_Discrete_v2",
+                 name: str = "SAC_Discrete",
                  device: Optional[torch.device] = None,
                  run_name: Optional[str] = None):
 
@@ -50,7 +51,6 @@ class SACDiscrete(RLAgent):
 
         # Assign additional attributes for SAC
         self._alpha: Optional[float] = None
-        self._markdown_trigger_fn = self._config.markdown_trigger_fn
 
         # Initialise the models
         self.initialise_models()
@@ -71,7 +71,7 @@ class SACDiscrete(RLAgent):
 
         # Set default path if none is provided
         if path is None:
-            path = Path.cwd() / "experiment_data" / "trained_models" / self.run_name
+            path = Path.cwd() / "experiment_data" / self.run_name/ "trained_models"
 
         # Create directory if it does not exist
         if not path.exists():
@@ -127,10 +127,16 @@ class SACDiscrete(RLAgent):
     def configs(self) -> Dict[str, Any]:
         """Return the configurations of the agent."""
         return {
-            "sac/episodes": self._config.n_episodes,
+
+            "init_exploration_steps": self._config.init_exploration_steps,
+            "min_pool_size": self._config.min_pool_size,
+            "num_epoch": self._config.num_epoch,
+            "epoch_length": self._config.epoch_length,
+
+
+
             "sac/buffer_size": self._config.buffer_size,
             "sac/batch_size": self._config.batch_size,
-            "sac/warmup_episodes": self._config.warmup_episodes,
             "sac/learning_rate": self._config.learning_rate,
             "sac/gamma": self._config.gamma,
             "sac/tau": self._config.tau,
@@ -138,7 +144,6 @@ class SACDiscrete(RLAgent):
             "sac/alpha": self._config.alpha,
             "sac/update_frequency": self._config.update_frequency,
             "sac/target_network_frequency": self._config.target_network_frequency,
-            "sac/markdown_trigger_fn": self._markdown_trigger_fn.name,
             "sac/actor/hidden_layers": self._config.actor_network_hidden_layers,
             "sac/critic/hidden_layers": self._config.critic_network_hidden_layers,
         }
@@ -189,9 +194,6 @@ class SACDiscrete(RLAgent):
 
             # CRITIC training
             with torch.no_grad():
-                # TODO: check if we need to mask actions here
-                # _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(
-                #     sample_next_obs_tensor, mask=sample_mask)
                 _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(
                     sample_next_obs_tensor, mask=sample_mask)
                 qf1_next_target = self._qf1_target(sample_next_obs_tensor)
@@ -267,131 +269,146 @@ class SACDiscrete(RLAgent):
 
         # Initialise variables
         global_step: int = 0
-        episode_i: int = 0
-        cumulative_reward: float = 0.0
+        is_terminated = True
+
+        # Warmup phase: collect random actions
+        while global_step < self._config.init_exploration_steps:
+
+            if is_terminated:
+                # Reset environment
+                obs = self._env.reset(get_info=False)
+
+            # Sample random action
+            action_mask = self._env.mask_actions().astype(np.int8)
+            actions = np.array(
+                [self._env.action_space.sample(mask=action_mask[i]) for i in range(self._env.state.n_products)])
+
+            # Execute action in environment
+            orig_dones = self._env.state.per_product_done_signal
+            next_obs, rewards, is_terminated, infos = self._env.step(actions)
+            dones = self._env.state.per_product_done_signal
+
+            # Add transition into the replay buffer
+            self.replay_buffer.add(state=obs[~orig_dones],
+                                   action=actions[~orig_dones],
+                                   reward=rewards[~orig_dones],
+                                   next_state=next_obs[~orig_dones],
+                                   terminated=dones[~orig_dones],
+                                   action_mask=action_mask[~orig_dones])
+            obs = next_obs
+            global_step += 1
+
         average_10_episode_reward: Deque = deque(maxlen=10)
+        is_terminated = True
 
-        # Loop over episodes
-        while episode_i < self._config.n_episodes:
+        # Loop over epochs
+        for epoch_step in range(self._config.num_epoch):
 
-            print(f"Starting Episode {episode_i}...")
+            start_step = global_step
 
-            # Initialise variables for episode
-            episode_reward: float = 0.0
-            episode_step: int = 0
-            self._markdown_trigger_fn.reset()
-            logger = EpisodeLogger()
+            for i in count():
+                cur_step = global_step - start_step
+                if cur_step >= self._config.epoch_length and len(self.replay_buffer) > self._config.min_pool_size:
+                    break
 
-            # Reset environment
-            obs, init_info = self._env.reset(get_info=True)
-            is_terminated = False
+                if is_terminated:
+                    # Reset environment
+                    obs = self._env.reset(get_info=False)
 
-            logger.log_info(init_info)
-
-            # Training Loop for single episode
-            while not is_terminated:
-
-                learning_started = episode_i >= self._config.warmup_episodes
-
-                # Warmup phase: collect random actions
-                if not learning_started:
-                    action_mask = self._env.mask_actions().astype(np.int8)
-                    actions = np.array(
-                        [self._env.action_space.sample(mask=action_mask[i]) for i in range(self._env.state.n_products)])
-
-                # Normal training phase
-                else:
-                    action_mask = self._env.mask_actions()
-                    # Get action from actor
-                    obs_tensor = torch.from_numpy(obs).to(self._device)
-                    actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]  # TODO: test stochastic action
+                action_mask = self._env.mask_actions()
+                # Get action from actor
+                obs_tensor = torch.from_numpy(obs).to(self._device)
+                actions = self._actor.evaluate(obs_tensor, mask=action_mask)[0]
 
                 # Execute action in environment
                 orig_dones = self._env.state.per_product_done_signal
                 next_obs, rewards, is_terminated, infos = self._env.step(actions)
-                # next_obs_tensor = torch.from_numpy(next_obs).to(self._device)
                 dones = self._env.state.per_product_done_signal
 
-                # Accumulate episode reward
-                episode_reward += rewards.sum()
-
-                # Logging
-                logger.log_info(infos)
-
-                # Add trajectory into the replay buffer
+                # Add transition into the replay buffer
                 self.replay_buffer.add(state=obs[~orig_dones],
                                        action=actions[~orig_dones],
                                        reward=rewards[~orig_dones],
                                        next_state=next_obs[~orig_dones],
                                        terminated=dones[~orig_dones],
                                        action_mask=action_mask[~orig_dones])
-
                 obs = next_obs
 
-                if learning_started:
-
-                    # Update the networks every few steps (as configured)
+                if len(self.replay_buffer) > self._config.min_pool_size:
                     if global_step % self._config.update_frequency == 0:
-
                         # Sample a batch from the replay buffer
                         memory = self.replay_buffer.sample(self._config.batch_size)
-
+                        # Update the parameters of the networks every few steps (as configured)
                         parameters_update_log = self.update_parameters(memory, global_step)
 
                         # Log the losses to wandb
                         if wandb_run is not None:
-                            try:
-                                wandb_run.log({
-                                    **{f"losses/{k}": v for k, v in parameters_update_log.items()},
-                                    "global_step": global_step,
-                                })
-                            except NameError:
-                                print(f"[Unable to log to wandb] Step {global_step}: actor/critic not updated yet")
+                            wandb_run.log({
+                                **{f"losses/{k}": v for k, v in parameters_update_log.items()},
+                                "global_step": global_step,
+                            })
 
-                # Increment the step counters
+                # Increment global step
                 global_step += 1
-                episode_step += 1
 
-            # End of episode: log the episode reward and reset the environment
-            cumulative_reward += episode_reward
-            average_10_episode_reward.append(episode_reward)
-            print(f"[Episode {episode_i}] Episode reward: {episode_reward} Episode steps: {episode_step}")
+                # Evaluate the agent at the end of each epoch
+                if global_step % self._config.epoch_length == 0:
 
-            # Use wandb to record rewards per episode
-            if wandb_run is not None:
+                    # Initialise variables
+                    obs, init_state_info = self._env.reset(get_info=True)
+                    logger = EpisodeLogger()
+                    episode_reward = 0.0
+                    is_terminated = False
+                    test_step = 0
+                    logger.log_info(init_state_info)
 
-                if episode_i % 10 == 0 or episode_i == self._config.n_episodes - 1:
-                    fig = logger.plot_episode_summary(title=f"Episode {episode_i}")
+                    while not is_terminated:
+
+                        action_mask = self._env.mask_actions()
+                        # Get action from actor
+                        obs_tensor = torch.from_numpy(obs).to(self._device)
+                        actions = self._actor.get_det_action(obs_tensor, mask=action_mask)
+
+                        # Execute action in environment
+                        next_obs, rewards, is_terminated, infos = self._env.step(actions)
+                        obs = next_obs
+
+                        # Accumulate episode reward
+                        episode_reward += rewards.sum()
+
+                        test_step += 1
+                        logger.log_info(infos)
+
+                    average_10_episode_reward.append(episode_reward)
+
+                    print(f"Epoch {epoch_step:04d} - Step Reward: {global_step} {episode_reward}")
 
                     episode_summary = logger.get_episode_summary()
 
-                    wandb_log = {
-                        "buffer_usage": len(self.replay_buffer),
-                        "episode_reward": episode_reward,
-                        "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
-                            average_10_episode_reward),
-                        "cumulative_reward": cumulative_reward,
-                        "episode_step": episode_step,
-                        "episode": episode_i,
-                        "global_step": global_step,
-                        "summary_plots": fig,
-                        "total_revenue": episode_summary["total_revenue"]
-                    }
-                else:
-                    wandb_log = {
-                        "buffer_usage": len(self.replay_buffer),
-                        "episode_reward": episode_reward,
-                        "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
-                            average_10_episode_reward),
-                        "cumulative_reward": cumulative_reward,
-                        "episode_step": episode_step,
-                        "episode": episode_i,
-                        "global_step": global_step,
-                        "total_revenue": episode_summary["total_revenue"],
-                        ** {f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
-                    }
-                wandb_run.log(wandb_log)
+                    # Use wandb to record rewards per episode
+                    if wandb_run is not None:
+                        fig = logger.plot_episode_summary(title=f"Epoch {epoch_step}")
 
-            # Increment episode counter
-            episode_i += 1
+                        wandb_log = {
+                            "env_buffer_usage": len(self.replay_buffer),
+                            "episode_reward": episode_reward,
+                            "average_10_episode_reward": 0.0 if len(average_10_episode_reward) == 0 else np.mean(
+                                average_10_episode_reward),
+                            "episode_step": test_step,
+                            "epoch": epoch_step,
+                            "global_step": global_step,
+                            "summary_plots": fig,
+                            "total_revenue": episode_summary["total_revenue"],
+                            **{f"rewards/average_{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
+                        }
 
+                        wandb_run.log(wandb_log)
+
+                    # save checkpoint (model and episode summary)
+                    checkpoint_path = Path.cwd() / "experiment_data" / self.run_name / "checkpoints" \
+                        / f"epoch_{epoch_step:04d}"
+                    # save model
+                    self.save(checkpoint_path / "saved_models")
+                    # save episode summary
+                    with open(checkpoint_path / "episode_summary.pkl", "wb") as f:
+                        pickle.dump(episode_summary, f)

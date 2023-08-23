@@ -1,6 +1,8 @@
+import pickle
 from collections import deque
 from datetime import timedelta
 from itertools import count
+from pathlib import Path
 from typing import Deque, Optional, Dict, Any, Union
 
 import gym
@@ -23,13 +25,13 @@ from wandb.wandb_run import Run
 class MBPO(RLAgent):
 
     def __init__(self, env: DefaultGelatoEnvWrapper,
+                 agent: RLAgent,
                  config: MBPOConfig,
                  name: str = "MBPO",
-                 agent: RLAgent = SACDiscrete,
                  device: Optional[torch.device] = None,
                  run_name: Optional[str] = None):
 
-        super().__init__(env, f"{name}-{agent.name}", run_name=run_name)
+        super().__init__(env=env, name=f"{name}-{agent.name}", run_name=run_name)
         self._config: MBPOConfig = config
 
         assert isinstance(self._env.action_space, gym.spaces.Discrete), "only discrete action space is supported"
@@ -93,9 +95,24 @@ class MBPO(RLAgent):
             "mbpo/rollout_min_epoch": self._config.rollout_min_epoch
         }
 
-    def save(self):
-        """Save the agent."""
-        pass
+    def save(self, path: Optional[Path] = None):
+        """Save the trained models.
+
+        Args:
+            path (Optional[Path]): Path to save the models to. Defaults to None.
+        """
+
+        # Set default path if none is provided
+        if path is None:
+            path = Path.cwd() / "experiment_data" / self.run_name / "trained_models"
+
+        # Create directory if it does not exist
+        if not path.exists():
+            path.mkdir(parents=True)
+
+        # Save the agent
+        self._agent.save(path / self._agent.name)
+
 
     def load(self):
         """Load the agent."""
@@ -243,15 +260,8 @@ class MBPO(RLAgent):
                     train_policy_steps += self.train_policy_repeats(total_step, train_policy_steps, cur_step)
 
                 total_step += 1
-                # cur_step += train_policy_steps
 
                 if total_step % self._config.epoch_length == 0:
-                    '''
-                    avg_reward_len = min(len(env_sampler.path_rewards), 5)
-                    avg_reward = sum(env_sampler.path_rewards[-avg_reward_len:]) / avg_reward_len
-                    logging.info("Step Reward: " + str(total_step) + " " + str(env_sampler.path_rewards[-1]) + " " + str(avg_reward))
-                    print(total_step, env_sampler.path_rewards[-1], avg_reward)
-                    '''
                     logger = EpisodeLogger()
                     init_state_info = self._env_sampler.reset()
                     sum_reward = 0
@@ -265,20 +275,17 @@ class MBPO(RLAgent):
                         sum_reward += np.sum(reward)
                         test_step += 1
                         logger.log_info(info)
-                    # logger.record_tabular("total_step", total_step)
-                    # logger.record_tabular("sum_reward", sum_reward)
-                    # logger.dump_tabular()
-                    # logging.info("Step Reward: " + str(total_step) + " " + str(sum_reward))
-                    # print(total_step, sum_reward)
 
                     average_10_episode_reward.append(sum_reward)
 
-                    print("Step Reward: " + str(total_step) + " " + str(sum_reward))
+                    print(f"Epoch {epoch_step:03d} - Step Reward: {total_step} {sum_reward}")
+
+                    episode_summary = logger.get_episode_summary()
 
                     # Use wandb to record rewards per episode
                     if wandb_run is not None:
                         fig = logger.plot_episode_summary(title=f"Episode {epoch_step}")
-                        episode_summary = logger.get_episode_summary()
+
                         wandb_log = {
                             "env_buffer_usage": len(self._env_pool),
                             "model_buffer_usage": len(self._model_pool),
@@ -287,11 +294,20 @@ class MBPO(RLAgent):
                                 average_10_episode_reward),
                             # "cumulative_reward": cumulative_reward,
                             "episode_step": test_step,
-                            "episode": epoch_step,
+                            "epoch": epoch_step,
                             "global_step": total_step,
                             "summary_plots": fig,
                             "total_revenue": episode_summary["total_revenue"],
-                            **{f"rewards/{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
+                            **{f"rewards/average_{k}": v for k, v in episode_summary["mean_product_reward_per_type"].items()}
                         }
 
                         wandb_run.log(wandb_log)
+
+                    # save checkpoint (model and episode summary)
+                    checkpoint_path = Path.cwd() / "experiment_data" / self.run_name / "checkpoints" \
+                                      / f"epoch_{epoch_step:04d}"
+                    # save agent
+                    self._agent.save(checkpoint_path / "agent")
+                    # save episode summary
+                    with open(checkpoint_path / "episode_summary.pkl", "wb") as f:
+                        pickle.dump(episode_summary, f)

@@ -293,7 +293,7 @@ class GelateriaEnv_v2(gym.Env):
         assert self._state is not None
 
         return {
-            "global_reward": self._state.global_reward,
+            "global_reward": self._state.global_reward
         }
 
     def step(self, action: Union[List[float], List[int], np.ndarray, torch.Tensor], action_dtype: Optional[str] = None):
@@ -340,7 +340,7 @@ class GelateriaEnv_v2(gym.Env):
             self._state.is_terminal = True
             logger.info(f"The episode has terminated after reaching the end date.")
 
-        info = {**(observations['private_obs']), **(self.get_info())}
+        info = {**(observations['private_obs']), **self._reward.info, **(self.get_info())}
 
         return observations, self._state.local_reward, self._state.is_terminal, info
 

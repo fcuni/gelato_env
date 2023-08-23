@@ -208,3 +208,8 @@ class BaseExperiment:
 
         # End of training: save the models
         agent.save()
+
+        if wandb_run is not None:
+            wandb_run.finish()
+
+

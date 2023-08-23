@@ -29,6 +29,8 @@ class SellThroughReward(BaseReward):
             original_stock = state.original_stock[product_id]
             sold_units = sales[product_id]
 
+            assert sold_units <= previous_state.products[product_id].stock, "Sold more units than available."
+
             sell_through_reward[product_id] = sold_units / original_stock
 
         return sell_through_reward

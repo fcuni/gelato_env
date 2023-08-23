@@ -15,7 +15,7 @@ def get_experiment_config():
 
 class SACExperiment(BaseExperiment):
     def __init__(self):
-        super().__init__(name="SACExperiment_NewEnv", config=get_experiment_config())
+        super().__init__(name="SACExperiment", config=get_experiment_config())
         self._config: SACExperimentConfig = get_experiment_config()
         self._env = self.build_env_v2(self._config.env_config)
 
