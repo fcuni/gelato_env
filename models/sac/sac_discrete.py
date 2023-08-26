@@ -48,6 +48,8 @@ class SACDiscrete(RLAgent):
         assert isinstance(self._env.action_space, gym.spaces.Discrete), "only discrete action space is supported"
         if device is None:
             self._device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        else:
+            self._device = device
 
         # Assign additional attributes for SAC
         self._alpha: Optional[float] = None
@@ -191,7 +193,7 @@ class SACDiscrete(RLAgent):
 
             sample_obs_tensor = sample_obs.to(self._device)
             sample_next_obs_tensor = sample_next_obs.to(self._device)
-
+            sample_mask = sample_mask.to(self._device)
             # CRITIC training
             with torch.no_grad():
                 _, next_state_action_probs, next_state_log_pi = self._actor.evaluate(

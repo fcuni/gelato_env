@@ -57,15 +57,10 @@ class ActorNetwork(BaseNetwork):
         dist = CategoricalMasked(logits=logits, mask=mask_tensor)
         with torch.no_grad():
             action_numpy = np.array([None] * len(logits))
-            action_numpy[mask_tensor.any(dim=-1).numpy()] = (dist.sample().detach().cpu().int()).numpy()
+            action_numpy[mask_tensor.any(dim=-1).detach().cpu().numpy()] = (dist.sample().detach().cpu().int()).numpy()
             action = action_numpy
         action_probs = dist.probs
         log_action_probabilities = F.log_softmax(logits, dim=-1)
-
-        # # deal with cases where probabilities are 0 before taking the log
-        # z = action_probs == 0.0
-        # z = z.float() * epsilon
-        # log_action_probabilities = torch.log(action_probs + z)
         return action, action_probs, log_action_probabilities
 
     def get_det_action(self, state_obs: torch.Tensor, mask: Optional[np.ndarray] = None) -> np.ndarray:
@@ -104,24 +99,24 @@ class SoftQNetwork(BaseNetwork):
         self.seed = torch.manual_seed(seed)
 
         in_dim = num_observation
-        self.layers = []
+        layers = []
         if hidden_layers is not None:
             for dim in hidden_layers:
-                self.layers += [nn.Linear(in_features=in_dim, out_features=dim)]
+                layers += [nn.Linear(in_features=in_dim, out_features=dim)]
                 in_dim = dim
                 if activation is not None:
-                    self.layers += [getattr(nn, activation)()]
+                    layers += [getattr(nn, activation)()]
         self.last_layer = nn.Linear(in_features=in_dim, out_features=num_action)
+        self.hidden_layers = nn.Sequential(*layers)
         self.reset_parameters()
 
     def reset_parameters(self):
-        for layer in self.layers:
+        for layer in self.hidden_layers:
             if isinstance(layer, nn.Linear):
                 layer.weight.data.uniform_(*hidden_init(layer))
         self.last_layer.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, state):
         x = state
-        for layer in self.layers:
-            x = layer(x)
+        x = self.hidden_layers(x)
         return self.last_layer(x)
