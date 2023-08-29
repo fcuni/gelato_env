@@ -11,7 +11,7 @@ def get_experiment_config():
 
 class DQNExperiment(BaseExperiment):
     def __init__(self):
-        super().__init__(name="DQNExperiment", config=get_experiment_config())
+        super().__init__(name="DqnExperiment", config=get_experiment_config())
         self._config: DQNExperimentConfig = get_experiment_config()
         self._env = self.build_env_v2(self._config.env_config)
 

@@ -16,7 +16,7 @@ from wandb.wandb_run import Run
 
 from data_generators.data_generators import DataGenerator
 from env.gelateria import GelateriaState, Gelato
-from env.gelateria_env import GelateriaEnv
+from env.gelateria_env_v2 import GelateriaEnv_v2 as GelateriaEnv
 from env.mask.action_mask import ActionMask
 from env.reward.base_reward import BaseReward
 from models.base_rl_agent import RLAgent

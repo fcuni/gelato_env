@@ -68,6 +68,10 @@ class MBPO(RLAgent):
     @property
     def configs(self) -> Dict[str, Any]:
         """Return the configurations of the agent."""
+        agent_configs = {}
+        for k, v in self._agent.configs.items():
+            if "/" in k:
+                agent_configs[k] = v
         return {
             "episodes": self._config.num_epoch,
             "buffer_size": self._config.replay_size,
@@ -92,7 +96,8 @@ class MBPO(RLAgent):
             "mbpo/rollout_min_length": self._config.rollout_min_length,
             "mbpo/rollout_max_length": self._config.rollout_max_length,
             "mbpo/rollout_max_epoch": self._config.rollout_max_epoch,
-            "mbpo/rollout_min_epoch": self._config.rollout_min_epoch
+            "mbpo/rollout_min_epoch": self._config.rollout_min_epoch,
+            **agent_configs
         }
 
     def save(self, path: Optional[Path] = None):

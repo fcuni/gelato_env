@@ -193,6 +193,8 @@ class SACDiscrete(RLAgent):
 
             sample_obs_tensor = sample_obs.to(self._device)
             sample_next_obs_tensor = sample_next_obs.to(self._device)
+            if isinstance(sample_mask, np.ndarray):
+                sample_mask = torch.from_numpy(sample_mask)
             sample_mask = sample_mask.to(self._device)
             # CRITIC training
             with torch.no_grad():
