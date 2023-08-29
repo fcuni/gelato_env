@@ -145,7 +145,11 @@ class DQN(RLAgent):
             "dqn/q_network/hidden_layers": self._config.q_network_hidden_layers,
             "dqn/update_frequency": self._config.update_frequency,
             "dqn/target_network_frequency": self._config.target_network_frequency,
-            "dqn/tau": self._config.tau
+            "dqn/tau": self._config.tau,
+            "dqn/epsilon_start": self._config.epsilon_start,
+            "dqn/epsilon_decay": self._config.epsilon_decay,
+            "dqn/epsilon_min": self._config.epsilon_min
+
         }
 
     def initialise_models(self):
@@ -332,7 +336,7 @@ class DQN(RLAgent):
 
     def update_parameters(self, memory, current_step):
 
-        self._epsilon = self._epsilon * self._config.epsilon_decay
+        self._epsilon = max(self._epsilon * self._config.epsilon_decay, self._config.epsilon_min)
 
         # Update the networks every few steps (as configured)
         if current_step % self._config.update_frequency == 0:
