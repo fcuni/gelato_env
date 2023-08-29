@@ -40,4 +40,4 @@ class MonotonicMarkdownsBooleanMask(ActionMask):
                 markdown = np.clip(markdown, a_min=0.0, a_max=1.0)
                 mask[idx, :int(round((markdown * 100).item()))] = 0
 
-        return mask.squeeze().astype(output_dtype)
+        return np.atleast_2d(mask.squeeze().astype(output_dtype))
