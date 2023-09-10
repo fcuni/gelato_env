@@ -8,6 +8,7 @@ def get_experiment_config():
     config = RuleBasedAgentExperimentConfig()
     return config
 
+
 class RuleBasedAgentExperiment(BaseExperiment):
     def __init__(self):
         super().__init__(name="RuleBasedAgentExperiment", config=get_experiment_config())
