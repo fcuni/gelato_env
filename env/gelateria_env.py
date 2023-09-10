@@ -14,7 +14,7 @@ from env.markdown_trigger.base_trigger import BaseTrigger
 from env.markdown_trigger.triggers import DefaultTrigger
 from env.reward.base_reward import BaseReward
 from env.mask.action_mask import ActionMask
-from env.mask.simple_masks import MonotonicMarkdownsMask
+from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsMask
 from utils.enums import Flavour
 from utils.misc import first_not_none
 

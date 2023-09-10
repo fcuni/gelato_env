@@ -1,4 +1,4 @@
-from experiments.sac_experiement import SACExperiment
+from experiments.sac_experiment import SACExperiment
 
 SACExperiment().run()
 

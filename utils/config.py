@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, TypeVar, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -16,6 +16,7 @@ from data_generators.generator import Generator
 from data_generators.sigmoid_generators import SigmoidGaussian
 from env.markdown_trigger.base_trigger import BaseTrigger
 from env.markdown_trigger.triggers import DelayTrigger, DefaultTrigger
+from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
 from env.mask.phased_markdown_mask import PhasedMarkdownMask
 from env.reward.multi_objective_reward import MultiObjectiveReward
 from utils.misc import custom_collate_fn, get_root_dir
@@ -146,7 +147,7 @@ class SACConfig_Old(BaseConfig):
 
 @dataclass
 class SACConfig(BaseConfig):
-    seed: int = 42
+    seed: int = 30#42
     torch_deterministic: bool = True
 
     gamma: float = 0.99
@@ -154,7 +155,7 @@ class SACConfig(BaseConfig):
     learning_rate: float = 1e-5
     auto_entropy_tuning: bool = True
     alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
-    buffer_size: int = 100000
+    buffer_size: int = 10000
     batch_size: int = 128
     target_network_frequency: int = 5000  # 8000  # how often to update the target network (in steps)
     target_entropy_scale: float = 0.89 #0.7#0.89
@@ -183,9 +184,10 @@ class DQNConfig(BaseConfig):
     warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
     q_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
     epsilon_start: float = 1.0
-    epsilon_decay: float = 0.99
+    epsilon_decay: float = 0.9998
+    epsilon_min: float = 0.01
 
-    init_exploration_steps: int = 1000
+    init_exploration_steps: int = 10000
     num_epoch: int = 1000
     epoch_length: int = 100
     min_pool_size: int = 1000
@@ -196,12 +198,12 @@ class MBPOConfig(BaseConfig):
     num_elites: int = 2
     pred_hidden_size: int = 200
     use_decay: bool = True
-    replay_size: int = 10000
+    replay_size: int = 100000
     rollout_batch_size: int = 400#1000
     model_retain_epochs: int = 1
-    max_path_length: int = 10
+    max_path_length: int = 14
     # training parameters
-    init_exploration_steps: int = 1000  # 5000,
+    init_exploration_steps: int = 10000  # 5000,
     num_epoch: int = 250
     epoch_length: int = 100#80 #1000
     min_pool_size: int = 1000
@@ -216,7 +218,7 @@ class MBPOConfig(BaseConfig):
     policy_train_batch_size: int = 256
 
     rollout_min_length: int = 1
-    rollout_max_length: int = 10
+    rollout_max_length: int = 1
     rollout_max_epoch: int = 80 #150
     rollout_min_epoch: int = 15 #20
 
@@ -224,21 +226,27 @@ class MBPOConfig(BaseConfig):
     days_per_step: int = 7
 
 @dataclass
+class RuleBasedAgentConfig(BaseConfig):
+    fixed_markdown_schedule: Tuple[int] = (40, 40, 40, 40, 50, 50, 60, 60, 60, 60, 75, 75, 75, 75)
+    num_epoch: int = 1000
+
+@dataclass
 class WandbConfig(BaseConfig):
     use_wandb: bool = True
     project: str = "msc_project_v4"
     entity: str = "timc"
-    mode: str = "online"
+    mode: str = "offline"
 
 
 @dataclass
 class EnvConfig(BaseConfig):
-    action_mask_fn: Optional[Callable] = PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
+    action_mask_fn: Optional[Callable] = MonotonicMarkdownsBooleanMask()#PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
     reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.2)
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
     end_date: Optional[datetime] = datetime(2023, 10, 9)
     max_steps: Optional[int] = None
+    single_product: bool = False
 
 
 @dataclass
@@ -250,7 +258,7 @@ class ExperimentConfig(BaseConfig):
     wandb_config: WandbConfig = field(default_factory=WandbConfig)
 
     # Set seeds & deterministic behaviour
-    seed: int = 42
+    seed: int = 30#42
     torch_deterministic: bool = True
 
 
@@ -272,6 +280,10 @@ class MBPOExperimentConfig(ExperimentConfig):
     mbpo_config: MBPOConfig = field(default_factory=MBPOConfig)
     sac_config: SACConfig = field(default_factory=SACConfig)
     dqn_config: DQNConfig = field(default_factory=DQNConfig)
+
+@dataclass
+class RuleBasedAgentExperimentConfig(ExperimentConfig):
+    rule_based_agent_config: RuleBasedAgentConfig = field(default_factory=RuleBasedAgentConfig)
 
 @dataclass
 class SupervisedExperimentConfig(ExperimentConfig):
