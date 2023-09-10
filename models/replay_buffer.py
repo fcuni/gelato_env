@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, List, Union
 
 import pandas as pd
-from env.gelateria_env import GelateriaEnv
+from env.gelateria_env_v2 import GelateriaEnv_v2 as GelateriaEnv
 from models.td_zero import StateQuad
 
 

@@ -31,9 +31,8 @@ class BaseExperiment:
     #     config = ExperimentConfig()
     #     return config
 
-    def __init__(self, name: str, config: ExperimentConfig, seed: int = 42):
+    def __init__(self, name: str, config: ExperimentConfig):
         self._name = name
-        self._seed = seed
         self._env: Optional[GelateriaEnv] = None
         self._reward: Optional[BaseReward] = None
         self._action_mask_fn: Optional[ActionMask] = None
@@ -63,7 +62,9 @@ class BaseExperiment:
                 "sales_model": env.sales_model_name,
                 "reward_type": env.reward_type_name,
                 "action_mask": env.action_mask_name,
-                "seed": self._seed
+                "seed": self._config.seed,
+                "n_products": env.state.n_products,
+                "products": [product.flavour.value for product in env.state.products.values()]
             }
 
         # Append Agent
@@ -131,7 +132,12 @@ class BaseExperiment:
             base_sales_input_transform_fn=transform_gym_inputs
         )
 
-        env = GelateriaEnv_v2(init_state=BaseExperiment._get_experiment_init_state(),
+        if config.single_product:
+            init_state = BaseExperiment._get_experiment_init_state_single_product()
+        else:
+            init_state = BaseExperiment._get_experiment_init_state()
+
+        env = GelateriaEnv_v2(init_state=init_state,
                               sales_model=sales_model,
                               reward=config.reward_fn,
                               mask_fn=config.action_mask_fn,
@@ -161,6 +167,47 @@ class BaseExperiment:
         # Loop through the rows in the filtered DataFrame
         for index, row in df[df['calendar_date'] == last_date].iterrows():
 
+            # Access the values of each column for the current row
+            products_id = uuid.uuid4()
+            flavour = Flavour(row['flavour'])
+            base_price = float(row['full_price_masked'])
+            stock = int(row['stock'])
+            current_markdowns[products_id] = row['markdown']
+            restock_possible = False
+            products += [Gelato(flavour=flavour, base_price=base_price, stock=stock, id=products_id,
+                                restock_possible=restock_possible)]
+            # break # TODO: test with only one product
+        return GelateriaState(
+            products={product.id: product for product in products},
+            current_markdowns=current_markdowns,
+            last_markdowns={product.id: None for product in products},
+            last_actions={product.id: [] for product in products},
+            local_reward={product.id: None for product in products},
+            historical_sales={product.id: [] for product in products},
+            current_date=last_date,
+            end_date=datetime(2023, 10, 9),
+            max_steps=None
+        )
+
+    @staticmethod
+    def _get_experiment_init_state_single_product() -> GelateriaState:
+
+        # load the masked dataset
+        df = pd.read_csv("masked_dataset.csv")
+        # sort the dataset by date
+        df['calendar_date'] = pd.to_datetime(df['calendar_date'])
+        df.sort_values(by='calendar_date', inplace=True)
+        # query the last date in the dataset
+        last_date = df['calendar_date'].max()
+
+        products = []
+        current_markdowns = {}
+
+        count = 0
+        # Loop through the rows in the filtered DataFrame
+        for index, row in df[df['calendar_date'] == last_date].iterrows():
+            if row['flavour'] != 'Blood Orange Sorbetto':
+                continue
             # Access the values of each column for the current row
             products_id = uuid.uuid4()
             flavour = Flavour(row['flavour'])
