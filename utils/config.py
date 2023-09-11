@@ -176,7 +176,7 @@ class MBPOConfig(BaseConfig):
     epoch_length: int = 100#80 #1000
     min_pool_size: int = 1000
     model_train_freq: int = 25#20 #250
-    real_ratio: float = 0.05
+    real_ratio: float = 0.9#0.05
     predict_model_batch_size: int = 256
     predict_model_holdout_ratio: float = 0.2
 
