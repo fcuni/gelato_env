@@ -133,7 +133,7 @@ class BaseExperiment:
         )
 
         if config.single_product:
-            init_state = BaseExperiment._get_experiment_init_state_single_product()
+            init_state = BaseExperiment._get_experiment_init_state_single_product(config)
         else:
             init_state = BaseExperiment._get_experiment_init_state()
 
@@ -150,7 +150,7 @@ class BaseExperiment:
         return env_wrap
 
     @staticmethod
-    def _get_experiment_init_state() -> GelateriaState:
+    def _get_experiment_init_state(config) -> GelateriaState:
 
         # load the masked dataset
         df = pd.read_csv("masked_dataset.csv")
@@ -185,12 +185,12 @@ class BaseExperiment:
             local_reward={product.id: None for product in products},
             historical_sales={product.id: [] for product in products},
             current_date=last_date,
-            end_date=datetime(2023, 10, 9),
-            max_steps=None
+            end_date=config.end_date,
+            max_steps=config.max_steps
         )
 
     @staticmethod
-    def _get_experiment_init_state_single_product() -> GelateriaState:
+    def _get_experiment_init_state_single_product(config) -> GelateriaState:
 
         # load the masked dataset
         df = pd.read_csv("masked_dataset.csv")
@@ -206,7 +206,7 @@ class BaseExperiment:
         count = 0
         # Loop through the rows in the filtered DataFrame
         for index, row in df[df['calendar_date'] == last_date].iterrows():
-            if row['flavour'] != 'White Chocolate Raspberry':  #'Blood Orange Sorbetto':
+            if row['flavour'] != 'Tiramisu':  #'Blood Orange Sorbetto':
                 continue
             # Access the values of each column for the current row
             products_id = uuid.uuid4()
@@ -226,8 +226,8 @@ class BaseExperiment:
             local_reward={product.id: None for product in products},
             historical_sales={product.id: [] for product in products},
             current_date=last_date,
-            end_date=datetime(2023, 10, 9),
-            max_steps=None
+            end_date=config.end_date,
+            max_steps=config.max_steps
         )
 
     @abstractmethod
