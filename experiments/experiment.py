@@ -206,7 +206,7 @@ class BaseExperiment:
         count = 0
         # Loop through the rows in the filtered DataFrame
         for index, row in df[df['calendar_date'] == last_date].iterrows():
-            if row['flavour'] != 'Blood Orange Sorbetto':
+            if row['flavour'] != 'Rosewater Almond':  #'Blood Orange Sorbetto':
                 continue
             # Access the values of each column for the current row
             products_id = uuid.uuid4()
