@@ -113,41 +113,9 @@ class TDZeroConfig(BaseConfig):
     path_to_model: Path = ROOT_DIR / "experiment_data/trained_models"
     seed: int = 42
 
-
-@dataclass
-class SACConfig_Old(BaseConfig):
-    seed: int = 42
-    torch_deterministic: bool = True
-    n_episodes: int = 500 #1000
-    gamma: float = 0.99
-    tau: float = 1e-2  #1.0
-    learning_rate: float = 5e-4
-    auto_entropy_tuning: bool = True
-    alpha: float = 0.2  # alpha for entropy (when automatic entropy tuning is off)
-    buffer_size: int = 200000
-    batch_size: int = 64
-    initial_random_steps: int = 20000   # 50000
-    target_network_frequency: int = 8000  # 8000  # how often to update the target network (in steps)
-    replay_buffer_path: Optional[Path] = ROOT_DIR / "experiment_data/buffers/sac_buffer.pkl"  # if path is provided, no new experience buffer is generated
-    save_replay_buffer: bool = True
-    target_entropy_scale: float = 0.7#0.89
-    markdown_penalty: float = 1.0
-    waste_penalty: float = 0.0
-    max_markdown_changes: int = 3  # TODO: not implemented yet
-    regenerate_buffer: bool = True
-    update_frequency: int = 800  # how often to update the actor & critic network (in steps)
-    minimum_markdown_duration: Optional[int] = None  # minimum number of days a markdown would last, if None, no minimum duration
-    warmup_steps: int = 173  # how many no-discount steps before taking actions from the policy network
-    markdown_trigger_fn: BaseTrigger = DelayTrigger(delay=warmup_steps)  # The function to decide if a markdown should be triggered
-    actor_network_hidden_layers: Optional[Sequence[int]] = (64,128, 128,64)
-    critic_network_hidden_layers: Optional[Sequence[int]] = (64,128, 128,64)
-    epsilon_greedy: bool = True
-    epsilon_greedy_min_epsilon: float = 2e-3
-    epsilon_greedy_epsilon_decay_rate: float = 0.99
-
 @dataclass
 class SACConfig(BaseConfig):
-    seed: int = 30#42
+    seed: int = 36
     torch_deterministic: bool = True
 
     gamma: float = 0.99
@@ -184,7 +152,7 @@ class DQNConfig(BaseConfig):
     warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
     q_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
     epsilon_start: float = 1.0
-    epsilon_decay: float = 0.9998
+    epsilon_decay: float = 0.99
     epsilon_min: float = 0.01
 
     init_exploration_steps: int = 10000
@@ -225,10 +193,12 @@ class MBPOConfig(BaseConfig):
     # GelateriaEnv_v2 parameters
     days_per_step: int = 7
 
+
 @dataclass
 class RuleBasedAgentConfig(BaseConfig):
     fixed_markdown_schedule: Tuple[int] = (40, 40, 40, 40, 50, 50, 60, 60, 60, 60, 75, 75, 75, 75)
     num_epoch: int = 1000
+
 
 @dataclass
 class WandbConfig(BaseConfig):
@@ -244,9 +214,9 @@ class EnvConfig(BaseConfig):
     reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.2)
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
-    end_date: Optional[datetime] = datetime(2023, 10, 9)
-    max_steps: Optional[int] = None
-    single_product: bool = False
+    end_date: Optional[datetime] = None#datetime(2023, 10, 9)
+    max_steps: Optional[int] = 4#None
+    single_product: bool = True
 
 
 @dataclass
@@ -258,7 +228,7 @@ class ExperimentConfig(BaseConfig):
     wandb_config: WandbConfig = field(default_factory=WandbConfig)
 
     # Set seeds & deterministic behaviour
-    seed: int = 30#42
+    seed: int = 36
     torch_deterministic: bool = True
 
 
