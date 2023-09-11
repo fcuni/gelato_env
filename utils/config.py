@@ -169,14 +169,14 @@ class MBPOConfig(BaseConfig):
     replay_size: int = 100000
     rollout_batch_size: int = 400#1000
     model_retain_epochs: int = 1
-    max_path_length: int = 14
+    max_path_length: int = 3
     # training parameters
     init_exploration_steps: int = 10000  # 5000,
     num_epoch: int = 250
     epoch_length: int = 100#80 #1000
     min_pool_size: int = 1000
     model_train_freq: int = 25#20 #250
-    real_ratio: float = 0.9#0.05
+    real_ratio: float = 1#0.05
     predict_model_batch_size: int = 256
     predict_model_holdout_ratio: float = 0.2
 
@@ -211,7 +211,7 @@ class WandbConfig(BaseConfig):
 @dataclass
 class EnvConfig(BaseConfig):
     action_mask_fn: Optional[Callable] = MonotonicMarkdownsBooleanMask()#PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
-    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.2)
+    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.6)
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
     end_date: Optional[datetime] = None#datetime(2023, 10, 9)
