@@ -115,7 +115,7 @@ class TDZeroConfig(BaseConfig):
 
 @dataclass
 class SACConfig(BaseConfig):
-    seed: int = 36
+    seed: int = 42
     torch_deterministic: bool = True
 
     gamma: float = 0.99
@@ -215,7 +215,7 @@ class EnvConfig(BaseConfig):
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
     end_date: Optional[datetime] = None#datetime(2023, 10, 9)
-    max_steps: Optional[int] = 4#None
+    max_steps: Optional[int] = 3#None
     single_product: bool = True
 
 
@@ -228,7 +228,7 @@ class ExperimentConfig(BaseConfig):
     wandb_config: WandbConfig = field(default_factory=WandbConfig)
 
     # Set seeds & deterministic behaviour
-    seed: int = 36
+    seed: int = 42
     torch_deterministic: bool = True
 
 
