@@ -7,15 +7,13 @@ import numpy as np
 import pandas as pd
 
 import torch
-from pytorch_lightning.accelerators import Accelerator
-from pytorch_lightning.callbacks import Callback
+# from pytorch_lightning.accelerators import Accelerator
+# from pytorch_lightning.callbacks import Callback
 from torch.utils.data import Sampler
 
-from data_generators.gaussian_generators import StrongSeasonalGaussian
-from data_generators.generator import Generator
-from data_generators.sigmoid_generators import SigmoidGaussian
-from env.markdown_trigger.base_trigger import BaseTrigger
-from env.markdown_trigger.triggers import DelayTrigger, DefaultTrigger
+# from data_generators.gaussian_generators import StrongSeasonalGaussian
+# from data_generators.generator import Generator
+# from data_generators.sigmoid_generators import SigmoidGaussian
 from env.mask.monotonic_markdowns_mask import MonotonicMarkdownsBooleanMask
 from env.mask.phased_markdown_mask import PhasedMarkdownMask
 from env.reward.multi_objective_reward import MultiObjectiveReward
@@ -48,71 +46,6 @@ class BaseConfig:
     def to_dict(self):
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
-
-@dataclass
-class NetConfig(BaseConfig):
-    input_key: str = "public_obs"
-    target: str = "target"
-    embedding_dims: List[int] = field(default_factory=lambda: [32, 32, 32])
-    activation: str = "ReLU"
-    lr: float = 1e-3
-    lr_scheduler: torch.optim.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
-    scheduler_config: Optional[Dict] = None
-    optim: torch.optim = torch.optim.Adam
-    path_to_model: Path = ROOT_DIR / "experiment_data/trained_models"
-
-
-@dataclass
-class LightningConfig(BaseConfig):
-    default_root_dir: Optional[str] = ROOT_DIR / "experiment_data/training_logs"
-    callbacks: Optional[Union[List[Callback], Callback]] = None
-    enable_progress_bar: bool = True
-    max_epochs: Optional[int] = 10
-    accelerator: Optional[Union[str, Accelerator]] = "cpu"
-
-
-@dataclass
-class DataGenerationConfig(BaseConfig):
-    dir_path: Path = ROOT_DIR / "experiment_data"
-    data_filename: str = "experiment_data.csv"
-    target_name: str = "sales"
-    time_period_in_days: int = 365
-    expected_sales_generator: Generator = StrongSeasonalGaussian()
-    uplift_generator: Generator = SigmoidGaussian()
-    cache_data: bool = True
-    # init_state: GelateriaState = field(default_factory=default_init_state)
-
-@dataclass
-class DataLoaderConfig(BaseConfig):
-    batch_size: Optional[int] = 64
-    train_val_split: float = 0.8
-    shuffle: Optional[bool] = True
-    sampler: Union[Sampler, Iterable, None] = None
-    batch_sampler: Union[Sampler[Sequence], Iterable[Sequence], None] = None
-    collate_fn: Optional[Callable[[List[T]], Any]] = custom_collate_fn
-    pin_memory: bool = False
-    drop_last: bool = False
-    timeout: float = 0
-    worker_init_fn: Optional[Callable[[int], None]] = None
-    multiprocessing_context = None
-    generator = None
-    prefetch_factor: int = 2
-    persistent_workers: bool = False
-    pin_memory_device: str = ""
-
-
-@dataclass
-class TDZeroConfig(BaseConfig):
-    n_episodes: int = 10000
-    horizon_steps: int = 10
-    epsilon: float = 0.9
-    gamma: float = 0.9
-    alpha: float = 0.9
-    warm_start: Optional[int] = None
-    q_init: Optional[np.array] = None
-    path_to_model: Path = ROOT_DIR / "experiment_data/trained_models"
-    seed: int = 42
-
 @dataclass
 class SACConfig(BaseConfig):
     seed: int = 42
@@ -126,13 +59,13 @@ class SACConfig(BaseConfig):
     buffer_size: int = 10000
     batch_size: int = 128
     target_network_frequency: int = 5000  # 8000  # how often to update the target network (in steps)
-    target_entropy_scale: float = 0.89 #0.7#0.89
+    target_entropy_scale: float = 0.89
     update_frequency: int = 50  # how often to update the actor & critic network (in steps)
-    actor_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128) # (64,128, 128,64)
-    critic_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)#(128, 512, 512, 128)
+    actor_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
+    critic_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
 
     init_exploration_steps: int = 1000
-    num_epoch: int = 1000#250
+    num_epoch: int = 1000
     epoch_length:int = 100
     min_pool_size: int = 1000
 
@@ -147,7 +80,7 @@ class DQNConfig(BaseConfig):
     learning_rate: float = 1e-5
     buffer_size: int = 100000
     batch_size: int = 128
-    target_network_frequency: int = 7000  # 8000  # how often to update the target network (in steps)
+    target_network_frequency: int = 7000  # how often to update the target network (in steps)
     update_frequency: int = 8  # how often to update the q network (in steps)
     warmup_episodes: int = 1000  # how many no-discount steps before taking actions from the policy network
     q_network_hidden_layers: Optional[Sequence[int]] = (64, 256, 64)
@@ -211,39 +144,32 @@ class WandbConfig(BaseConfig):
 @dataclass
 class EnvConfig(BaseConfig):
     action_mask_fn: Optional[Callable] = MonotonicMarkdownsBooleanMask()#PhasedMarkdownMask(get_markdown_schedule(), delta_markdown=10)
-    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.6)
+    reward_fn: Callable = MultiObjectiveReward(sell_through_coeff=0.2)
     restock_fn: Optional[Callable] = None
     days_per_step: int = 7
-    end_date: Optional[datetime] = None#datetime(2023, 10, 9)
-    max_steps: Optional[int] = 3#None
+    end_date: Optional[datetime] = None
+    max_steps: Optional[int] = 3
     single_product: bool = True
 
 
 @dataclass
 class ExperimentConfig(BaseConfig):
     env_config: EnvConfig = field(default_factory=EnvConfig)
-    # net_config: NetConfig = field(default_factory=NetConfig)
-    # data_generation_config: DataGenerationConfig = field(default_factory=DataGenerationConfig)
-    # dataloader_config: DataLoaderConfig = field(default_factory=DataLoaderConfig)
     wandb_config: WandbConfig = field(default_factory=WandbConfig)
 
     # Set seeds & deterministic behaviour
     seed: int = 42
     torch_deterministic: bool = True
 
-
-@dataclass
-class TDZeroExperimentConfig(ExperimentConfig):
-    td_zero_config: Optional[TDZeroConfig] = field(default_factory=TDZeroConfig)
-
-
 @dataclass
 class SACExperimentConfig(ExperimentConfig):
     sac_config: SACConfig = field(default_factory=SACConfig)
 
+
 @dataclass
 class DQNExperimentConfig(ExperimentConfig):
     dqn_config: DQNConfig = field(default_factory=DQNConfig)
+
 
 @dataclass
 class MBPOExperimentConfig(ExperimentConfig):
@@ -251,13 +177,11 @@ class MBPOExperimentConfig(ExperimentConfig):
     sac_config: SACConfig = field(default_factory=SACConfig)
     dqn_config: DQNConfig = field(default_factory=DQNConfig)
 
+
 @dataclass
 class RuleBasedAgentExperimentConfig(ExperimentConfig):
     rule_based_agent_config: RuleBasedAgentConfig = field(default_factory=RuleBasedAgentConfig)
 
-@dataclass
-class SupervisedExperimentConfig(ExperimentConfig):
-    lightning_config: LightningConfig = field(default_factory=LightningConfig)
 
 
 
