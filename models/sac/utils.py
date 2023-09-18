@@ -1,21 +1,7 @@
 from typing import Optional, Callable
 
 import numpy as np
-# import torch
 from utils.misc import convert_dict_to_numpy
-
-
-# def save(args, save_name, model, wandb, ep=None):
-#     import os
-#     save_dir = './trained_models/'
-#     if not os.path.exists(save_dir):
-#         os.makedirs(save_dir)
-#     if ep is not None:
-#         torch.save(model.state_dict(), save_dir + args.run_name + save_name + str(ep) + ".pth")
-#         wandb.save(save_dir + args.run_name + save_name + str(ep) + ".pth")
-#     else:
-#         torch.save(model.state_dict(), save_dir + args.run_name + save_name + ".pth")
-#         wandb.save(save_dir + args.run_name + save_name + ".pth")
 
 
 def collect_random(env, dataset, num_samples=200, state_transform_fn: Optional[Callable] = None):

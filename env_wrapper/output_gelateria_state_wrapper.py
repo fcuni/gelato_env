@@ -4,7 +4,7 @@ from typing import Union, List, Dict, Any, Tuple
 import gym
 
 from env.gelateria import GelateriaState
-from env.gelateria_env_v2 import GelateriaEnv_v2 as GelateriaEnv
+from env.gelateria_env import GelateriaEnv
 from utils.types import TensorType
 
 

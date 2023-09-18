@@ -20,7 +20,7 @@ class SACExperiment(BaseExperiment):
     def __init__(self):
         super().__init__(name="SacDiscreteExperiment", config=get_experiment_config())
         self._config: SACExperimentConfig = get_experiment_config()
-        self._env = self.build_env_v2(self._config.env_config)
+        self._env = self.build_env(self._config.env_config)
 
     def get_rl_model(self) -> RLAgent:
         rl_model = SACDiscrete(env=self._env, config=self._config.sac_config)

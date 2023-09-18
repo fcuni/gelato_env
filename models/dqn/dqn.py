@@ -27,7 +27,7 @@ from models.dqn.model import QNetwork
 
 EnvType = Union[gym.Env, gym.core.Env]
 from models.base_rl_agent import RLAgent
-from utils.buffer import ReplayBuffer_v2 as ReplayBuffer
+from utils.buffer import ReplayBuffer as ReplayBuffer
 from utils.config import DQNConfig
 from wandb.wandb_run import Run
 

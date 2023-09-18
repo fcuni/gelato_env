@@ -9,7 +9,7 @@ import numpy as np
 import tqdm
 import os
 
-from env.gelateria_env import GelateriaEnv
+from env.gelateria_env_old import GelateriaEnv
 from models.base_rl_agent import RLAgent
 from utils.config import TDZeroConfig
 from utils.misc import first_not_none

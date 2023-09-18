@@ -5,14 +5,14 @@ import torch
 import numpy as np
 
 
-# EnvType = Union[GelateriaEnv, GelateriaEnv_v2, DefaultGelatoEnvWrapper]
+# EnvType = Union[GelateriaEnv, DefaultGelatoEnvWrapper]
 TensorType = Union[torch.Tensor, np.ndarray]
 
 Transition = namedtuple("Transition",
                         field_names=["state", "action", "next_state", "reward", "terminated", "truncated"])
 
-Transition_new = namedtuple("Transition_new",
-                        field_names=["state", "action", "next_state", "reward", "terminated", "truncated", "action_mask"])
+Transition_With_Action_Mask = namedtuple("Transition_With_Action_Mask",
+                                         field_names=["state", "action", "next_state", "reward", "terminated", "truncated", "action_mask"])
 
 Activations = Literal[tuple(Literal[act] for act in torch.nn.modules.activation.__all__)]
 

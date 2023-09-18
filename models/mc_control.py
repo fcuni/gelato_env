@@ -8,7 +8,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import tqdm
 
-from env.gelateria_env import GelateriaEnv
+from env.gelateria_env_old import GelateriaEnv
 from models.base_rl_agent import RLAgent
 from utils.config import OptimiserConfig
 

@@ -1,3 +1,9 @@
-from experiments.td_zero_experiment import RLExperiment
+from experiments.dqn_experiement import DQNExperiment
 
-RLExperiment().run()
+from experiments.mbpo_dqn_experiement import MbpoDqnExperiment
+
+
+for _ in range(4):
+    DQNExperiment().run()
+
+MbpoDqnExperiment().run()

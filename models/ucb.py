@@ -2,7 +2,7 @@ from typing import Tuple
 
 import numpy as np
 
-from env.gelateria_env import GelateriaEnv
+from env.gelateria_env_old import GelateriaEnv
 
 
 class UCB:

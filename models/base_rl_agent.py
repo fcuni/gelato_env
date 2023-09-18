@@ -2,8 +2,7 @@ from abc import abstractmethod
 from typing import Optional
 from wandb.wandb_run import Run
 
-from env.gelateria_env_v2 import GelateriaEnv_v2 as GelateriaEnv
-from utils.config import BaseConfig
+from env.gelateria_env import GelateriaEnv
 
 from datetime import datetime
 

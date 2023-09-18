@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from env.gelateria import GelateriaState
-from env.gelateria_env_v2 import GelateriaEnv_v2 as GelateriaEnv
+from env.gelateria_env import GelateriaEnv
 from utils.types import TensorType
 
 

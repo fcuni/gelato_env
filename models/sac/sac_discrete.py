@@ -26,7 +26,7 @@ import torch.nn.functional as F
 EnvType = Union[gym.Env, gym.core.Env]
 from models.base_rl_agent import RLAgent
 from models.sac.networks import ActorNetwork, SoftQNetwork
-from utils.buffer import ReplayBuffer_v2 as ReplayBuffer
+from utils.buffer import ReplayBuffer
 from utils.config import SACConfig
 from wandb.wandb_run import Run
 
