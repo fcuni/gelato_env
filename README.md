@@ -12,7 +12,19 @@ The design of the Gelato-Env environment is shown in the following diagram:
 ## Usage
 A pre-trained sales prediction model is needed to make use of the environment. There is no default model provided, but the user can train their own model with reference to the sales prediction model training script.
 
+## Training the Sales Prediction Model
+The training script provides a simple sales prediction model using a fairly simple MLP.
+
+
+
+
+
+## Logging
+This environment has integration with [wandb](https://docs.wandb.ai) to log the training process, so the user will need to set up a wandb account and enter their `WANDB_API_KEY` when prompted.
+It is possible to turn off the wandb logging in the configuration, but the progress of training will only be visible in the console.
+
 ## Installation
+
 
 ### Linux
 
@@ -33,3 +45,5 @@ Use the Makefile to install the repo and its dependencies:
 ```bash
 make setup
 ```
+
+#
