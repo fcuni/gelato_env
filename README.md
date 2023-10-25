@@ -11,7 +11,7 @@ The design of the Gelato-Env environment is shown in the following diagram:
 
 ## Sales Prediction Model
 A pre-trained sales prediction model is needed to make use of the environment. The environment comes with a two-step sales prediction model that predicts the sales of each flavour of ice cream with the multiplication of the separately predicted base sales and sale uplift. That is, the sales is predicted using the outputs of two separate prediction model, one for base sales and the other for the sale uplifts. The sales is predicted as:
-$$\text{sales} = \text{base_sales} \times \text{sale uplift} $$.
+$$\text{sales} = \text{base\_sales} \times \text{sale\_uplift} $$.
 There is no pre-trained model provided, but a training script is provided for training the base sales model using dataset from users. For simplicity, the default base sales model is a simple MLP with configurable hidden layers. Provided in the code, the default sale uplift model simply samples sales uplifts from a probability distribution.
 
 In case the user wants to use a different sales prediction model, the user can implement their own sales prediction model and pass it to the environment by changing the `build_env` method in `experiments/experiment.py`.
