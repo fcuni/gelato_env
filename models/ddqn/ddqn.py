@@ -23,12 +23,12 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-from models.dqn.model import QNetwork
+from models.ddqn.model import QNetwork
 
 EnvType = Union[gym.Env, gym.core.Env]
 from models.base_rl_agent import RLAgent
 from utils.buffer import ReplayBuffer as ReplayBuffer
-from utils.config import DQNConfig
+from utils.config import DDQNConfig
 from wandb.wandb_run import Run
 
 from utils.types import TensorType
@@ -40,16 +40,16 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     return max(slope * t + start_e, end_e)
 
 
-class DQN(RLAgent):
+class DDQN(RLAgent):
 
     def __init__(self, env: EnvType,
-                 config: DQNConfig,
+                 config: DDQNConfig,
                  name: str = "DQN",
                  device: Optional[torch.device] = None,
                  run_name: Optional[str] = None):
 
         super().__init__(env, name, run_name=run_name)
-        self._config: DQNConfig = config
+        self._config: DDQNConfig = config
 
         assert isinstance(self._env.action_space, gym.spaces.Discrete), "only discrete action space is supported"
         if device is None:
@@ -138,17 +138,17 @@ class DQN(RLAgent):
             "num_epoch": self._config.num_epoch,
             "epoch_length": self._config.epoch_length,
 
-            "dqn/buffer_size": self._config.buffer_size,
-            "dqn/batch_size": self._config.batch_size,
-            "dqn/learning_rate": self._config.learning_rate,
-            "dqn/gamma": self._config.gamma,
-            "dqn/q_network/hidden_layers": self._config.q_network_hidden_layers,
-            "dqn/update_frequency": self._config.update_frequency,
-            "dqn/target_network_frequency": self._config.target_network_frequency,
-            "dqn/tau": self._config.tau,
-            "dqn/epsilon_start": self._config.epsilon_start,
-            "dqn/epsilon_decay": self._config.epsilon_decay,
-            "dqn/epsilon_min": self._config.epsilon_min
+            "ddqn/buffer_size": self._config.buffer_size,
+            "ddqn/batch_size": self._config.batch_size,
+            "ddqn/learning_rate": self._config.learning_rate,
+            "ddqn/gamma": self._config.gamma,
+            "ddqn/q_network/hidden_layers": self._config.q_network_hidden_layers,
+            "ddqn/update_frequency": self._config.update_frequency,
+            "ddqn/target_network_frequency": self._config.target_network_frequency,
+            "ddqn/tau": self._config.tau,
+            "ddqn/epsilon_start": self._config.epsilon_start,
+            "ddqn/epsilon_decay": self._config.epsilon_decay,
+            "ddqn/epsilon_min": self._config.epsilon_min
 
         }
 
