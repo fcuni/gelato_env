@@ -19,20 +19,20 @@ No pre-trained model is provided, but a training script is provided for training
 In case the user wants to use a different sales prediction model, the user can implement their own sales prediction model and pass it to the environment by changing the `build_env` method in `experiments/experiment.py`.
 
 
-[//]: # (### Training the Sales Prediction Model)
+### Training the Sales Prediction Model
 
-[//]: # (The environment comes with a default two-step model that predicts the sales of each flavour of ice cream with the multiplication of the separately predicted base sales and sale uplift. That is, the sales is predicted as:)
+The environment is by default expecting to be integrated with a two-step model that predicts the sales of each flavour of ice cream with the multiplication of the separately predicted base sales and sale uplift. That is, the sales is predicted as:
 
-[//]: # ($$\text{sales} = \text{base_sales} \times \text{sale uplift} $$.)
+$$\text{sales} = \text{base_sales} \times \text{sale uplift} $$.
 
-[//]: # ()
-[//]: # (The training script provides a simple sales prediction model using a fairly simple MLP.)
 
-[//]: # (```python)
+A training script is provided to train the base sales prediction model using a fairly simple MLP.
 
-[//]: # (python train_sales_prediction_model.py)
+```python
 
-[//]: # (```)
+python train_sales_prediction_model.py
+
+```
 
 
 
