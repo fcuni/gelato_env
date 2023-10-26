@@ -15,27 +15,20 @@ A pre-trained sales prediction model is needed to make use of the environment. T
 $$\text{sales} = \text{base sales} \times \text{sale uplift}$$
 
 No pre-trained model is provided, but a training script is provided for training the base sales model using a user-provided dataset. For simplicity, the default base sales model is a simple MLP with configurable hidden layers. As provided in the code, the default sale uplift model simply samples sales uplifts from a probability distribution.
+```python
+python train_sales_prediction_model.py
+```
 
 In case the user wants to use a different sales prediction model, the user can implement their own sales prediction model and pass it to the environment by changing the `build_env` method in `experiments/experiment.py`.
 
 
-### Training the Sales Prediction Model
+## Running Experiments
 
-The environment is by default expecting to be integrated with a two-step model that predicts the sales of each flavour of ice cream with the multiplication of the separately predicted base sales and sale uplift. That is, the sales is predicted as:
-
-$$\text{sales} = \text{base_sales} \times \text{sale uplift} $$.
-
-
-A training script is provided to train the base sales prediction model using a fairly simple MLP.
+Once the pre-trained sales prediction model is available, an experiment can be run with the following command:
 
 ```python
-
-python train_sales_prediction_model.py
-
+python run_experiment.py --algorithm [ ddqn | sac-discrete | mbpo-ddqn | mbpo-sac-discrete ]
 ```
-
-
-
 
 ## Logging
 This environment has integration with [wandb](https://docs.wandb.ai) to log the training process, so the user will need to set up a wandb account and enter their `WANDB_API_KEY` when prompted.
