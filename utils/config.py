@@ -46,11 +46,11 @@ class BaseConfig:
     def to_dict(self):
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
+
 @dataclass
 class SACConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
-
     gamma: float = 0.99
     tau: float = 0.89  #1.0 #target smoothing coefficient
     learning_rate: float = 1e-5
@@ -71,7 +71,7 @@ class SACConfig(BaseConfig):
 
 
 @dataclass
-class DQNConfig(BaseConfig):
+class DDQNConfig(BaseConfig):
     seed: int = 42
     torch_deterministic: bool = True
 
@@ -88,7 +88,6 @@ class DQNConfig(BaseConfig):
     epsilon_decay: float = 0.99
     epsilon_min: float = 0.01
 
-    init_exploration_steps: int = 10000
     num_epoch: int = 1000
     epoch_length: int = 100
     min_pool_size: int = 1000
@@ -167,15 +166,15 @@ class SACExperimentConfig(ExperimentConfig):
 
 
 @dataclass
-class DQNExperimentConfig(ExperimentConfig):
-    dqn_config: DQNConfig = field(default_factory=DQNConfig)
+class DDQNExperimentConfig(ExperimentConfig):
+    dqn_config: DDQNConfig = field(default_factory=DDQNConfig)
 
 
 @dataclass
 class MBPOExperimentConfig(ExperimentConfig):
     mbpo_config: MBPOConfig = field(default_factory=MBPOConfig)
     sac_config: SACConfig = field(default_factory=SACConfig)
-    dqn_config: DQNConfig = field(default_factory=DQNConfig)
+    dqn_config: DDQNConfig = field(default_factory=DDQNConfig)
 
 
 @dataclass

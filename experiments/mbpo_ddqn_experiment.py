@@ -1,6 +1,6 @@
 from experiments.experiment import BaseExperiment
 from models.base_rl_agent import RLAgent
-from models.dqn.dqn import DQN
+from models.ddqn.ddqn import DDQN
 from models.mbpo.mbpo import MBPO
 from utils.config import MBPOExperimentConfig
 
@@ -10,14 +10,14 @@ def get_experiment_config():
     return config
 
 
-class MbpoDqnExperiment(BaseExperiment):
+class MbpoDdqnExperiment(BaseExperiment):
     def __init__(self):
         super().__init__(name="MbpoDqnExperiment", config=get_experiment_config())
         self._config: MBPOExperimentConfig = get_experiment_config()
         self._env = self.build_env(self._config.env_config)
 
     def get_agent(self) -> RLAgent:
-        agent = DQN(env=self._env, config=self._config.dqn_config)
+        agent = DDQN(env=self._env, config=self._config.dqn_config)
         return agent
 
     def get_rl_model(self) -> RLAgent:
@@ -27,4 +27,4 @@ class MbpoDqnExperiment(BaseExperiment):
 
 
 if __name__ == "__main__":
-    MbpoDqnExperiment().run()
+    MbpoDdqnExperiment().run()
